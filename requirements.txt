@@ -1,0 +1,76 @@
+# Dependencias del Proyecto OCR - IA 051
+# Python 3.9+
+
+# ========================================
+# PROCESAMIENTO DE IMÁGENES
+# ========================================
+numpy>=1.24.0
+opencv-python>=4.8.0.76          # Manipulación de imágenes, sin funciones OCR prohibidas
+pillow>=10.0.0                    # Carga y guardado de imágenes
+scikit-image>=0.21.0              # Algoritmos de procesamiento de imágenes
+
+# ========================================
+# MACHINE LEARNING / DEEP LEARNING
+# ========================================
+tensorflow>=2.13.0                # Framework de deep learning
+# O alternativamente:
+# torch>=2.0.0
+# torchvision>=0.15.0
+
+scikit-learn>=1.3.0               # Clasificadores tradicionales y métricas
+scipy>=1.11.0                     # Operaciones científicas
+
+# ========================================
+# VISUALIZACIÓN Y ANÁLISIS
+# ========================================
+matplotlib>=3.7.0                 # Gráficos y visualización
+seaborn>=0.12.0                   # Visualización estadística
+
+# ========================================
+# UTILIDADES
+# ========================================
+pandas>=2.0.0                     # Manejo de datos tabulares
+pyyaml>=6.0                       # Lectura de archivos de configuración
+tqdm>=4.65.0                      # Barras de progreso
+python-dateutil>=2.8.2            # Manejo de fechas
+
+# ========================================
+# OPCIONAL - MEJORAS
+# ========================================
+# Para corrección ortográfica (opcional)
+# pyspellchecker>=0.7.0
+# python-Levenshtein>=0.21.0
+
+# Para lectura de PDFs (opcional)
+# PyPDF2>=3.0.0
+
+# Para manejo de archivos Excel (opcional)
+# openpyxl>=3.1.0
+
+# ========================================
+# DESARROLLO Y TESTING
+# ========================================
+jupyter>=1.0.0                    # Notebooks
+ipykernel>=6.25.0                 # Kernel de Jupyter
+pytest>=7.4.0                     # Testing
+black>=23.7.0                     # Formateo de código
+flake8>=6.1.0                     # Linting
+
+# ========================================
+# LOGGING Y MONITOREO
+# ========================================
+colorlog>=6.7.0                   # Logs coloreados en consola
+
+# ========================================
+# NOTAS IMPORTANTES
+# ========================================
+# NO INCLUIR:
+# - tesseract-ocr o pytesseract (prohibido)
+# - easyocr (prohibido)
+# - Google Cloud Vision API
+# - Cualquier librería que resuelva directamente el OCR
+
+# VERSIONES:
+# Python: 3.9, 3.10 o 3.11 recomendado
+# CUDA: 11.8+ si usas GPU con TensorFlow
+# cuDNN: 8.6+ para aceleración GPU

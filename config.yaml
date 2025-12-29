@@ -1,0 +1,119 @@
+# Configuración del Proyecto OCR Simplificado
+
+# Rutas principales
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  data_labels: "data/labels"
+  models_weights: "models/weights"
+  output: "output"
+  logs: "logs"
+
+# Configuración de entrada
+input:
+  allowed_formats: [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]
+  max_size_mb: 10
+  max_dimensions: [4000, 4000]
+
+# Preprocesamiento de imágenes
+preprocessing:
+  # Reducción de ruido
+  noise_reduction:
+    enabled: true
+    method: "bilateral"  # gaussian, bilateral, median
+  
+  # Binarización
+  binarization:
+    method: "adaptive"   # otsu, adaptive
+    block_size: 11
+    c_constant: 2
+  
+  # Corrección de inclinación
+  deskew:
+    enabled: true
+    max_angle: 15
+
+# Configuración del modelo
+model:
+  # Dimensiones de entrada
+  input_shape: [32, 32, 1]  # alto x ancho x canales
+  
+  # Clases
+  num_classes: 62  # 10 dígitos + 26 mayúsculas + 26 minúsculas
+  
+  # Arquitectura
+  architecture: "cnn"  # cnn, resnet
+  
+  # Entrenamiento
+  training:
+    batch_size: 64
+    epochs: 50
+    learning_rate: 0.001
+    validation_split: 0.2
+    
+    # Data augmentation
+    augmentation:
+      enabled: true
+      rotation_range: 10
+      width_shift: 0.1
+      height_shift: 0.1
+      zoom_range: 0.1
+    
+    # Early stopping
+    early_stopping:
+      enabled: true
+      patience: 10
+      monitor: "val_accuracy"
+
+# Segmentación
+segmentation:
+  # Detección de letras
+  letter:
+    min_width: 5
+    min_height: 10
+    padding: 2
+  
+  # Detección de palabras
+  word:
+    min_gap: 10  # espacio mínimo entre palabras en píxeles
+  
+  # Detección de líneas
+  line:
+    min_height: 10
+    threshold_ratio: 0.1
+
+# Funcionalidades opcionales
+extras:
+  # Detección de tablas
+  tables:
+    enabled: false
+    output_format: "markdown"  # markdown, html, latex
+  
+  # Detección de figuras
+  figures:
+    enabled: false
+    min_area: 1000
+
+# Salida
+output:
+  save_text: true
+  save_visualization: false
+  text_format: "txt"  # txt, json
+
+# Logging
+logging:
+  enabled: true
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  save_to_file: true
+
+# Dataset colaborativo
+collaborative_dataset:
+  deadline: "2024-12-15"
+  requirements:
+    alphabets_per_person: 5
+    words_per_person: 100
+
+# Hardware
+hardware:
+  use_gpu: true
+  gpu_memory_fraction: 0.8
