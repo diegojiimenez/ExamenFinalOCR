@@ -8,6 +8,7 @@ from tensorflow.keras.models import load_model
 from utils.preprocessing import preprocess_image
 from utils.segmentation import segment_characters
 from core.model_manager import ModelManager
+from utils.config import config
 
 
 class UniversalPredictor:
@@ -15,15 +16,19 @@ class UniversalPredictor:
     Predictor universal que maneja letras, palabras y frases
     """
     
-    def __init__(self, model_path="models/best_model.h5"):
+    def __init__(self, model_path=None):
+        # Usar configuración si no se especifica ruta
+        if model_path is None:
+            model_path = config.get('model.path', 'models/best_model.h5')
+        
         self.model_manager = ModelManager(model_path)
         self.model = self.model_manager.load_model()
         self.char_map = self._build_char_map()
     
     def _build_char_map(self):
-        """Mapa de índices a caracteres"""
-        chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        return {i: char for i, char in enumerate(chars)}
+        """Mapa de índices a caracteres desde configuración"""
+        char_map_str = config.get('model.char_map', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+        return {i: char for i, char in enumerate(char_map_str)}
     
     def predict(self, image_path, debug=False):
         """
@@ -37,7 +42,7 @@ class UniversalPredictor:
             tuple: (texto_reconocido, info_debug)
         """
         # 1. CARGAR Y PREPROCESAR
-        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
         if image is None:
             raise ValueError(f"No se pudo cargar: {image_path}")
         
@@ -45,6 +50,11 @@ class UniversalPredictor:
         
         # 2. SEGMENTAR CARACTERES
         char_boxes = segment_characters(processed, debug=debug)
+        
+        if not char_boxes:
+            if debug:
+                print("⚠️  No se detectaron caracteres")
+            return "", {'text': '', 'type': 'VACÍO', 'num_chars': 0, 'boxes': []}
         
         if debug:
             print(f"🔍 Caracteres detectados: {len(char_boxes)}")
@@ -90,7 +100,9 @@ class UniversalPredictor:
     
     def _detect_content_type(self, num_chars):
         """Detecta el tipo de contenido según número de caracteres"""
-        if num_chars == 1:
+        if num_chars == 0:
+            return "VACÍO"
+        elif num_chars == 1:
             return "LETRA"
         elif 2 <= num_chars <= 6:
             return "PALABRA"
@@ -100,8 +112,10 @@ class UniversalPredictor:
 
 def predict_cli(image_path):
     """Función auxiliar para línea de comandos"""
+    from pathlib import Path
+    
     print(f"\n{'='*60}")
-    print(f"🔍 Procesando: {image_path}")
+    print(f"🔍 Procesando: {Path(image_path).name}")
     print('='*60)
     
     predictor = UniversalPredictor()

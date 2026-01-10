@@ -1,0 +1,35 @@
+# Configuración del Sistema OCR
+
+model:
+  path: "models/best_model.h5"
+  input_shape: [28, 28, 1]
+  char_map: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz"
+
+preprocessing:
+  blur_kernel: 5
+  adaptive_thresh_block: 11
+  adaptive_thresh_c: 2
+  
+segmentation:
+  min_area: 50
+  min_width: 5
+  min_height: 10
+
+paths:
+  # Carpetas principales de datos
+  data_root: "data/"
+  dataset: "data/dataset/"
+  referencia: "data/referencia/"
+  pruebas: "data/pruebas/"
+  test_images: "data/pruebas/"  # Alias para pruebas
+  output: "output/"
+  
+  # Sub-carpetas de dataset
+  dataset_ia: "data/dataset/DATASET_IA/"
+  dataset_completo: "data/dataset/datasetCompleto/"
+  dataset_completo2: "data/dataset/DatasetCompleto2/"
+  
+  # Sub-carpetas de referencia
+  mayusculas: "data/referencia/Mayúsculas/"
+  minusculas: "data/referencia/Minúsculas/"
+  numeros: "data/referencia/Números/"

@@ -1,4 +1,6 @@
-# Python
+# ============================================
+# PYTHON
+# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -23,49 +25,139 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Jupyter Notebook
+# ============================================
+# JUPYTER NOTEBOOK
+# ============================================
 .ipynb_checkpoints
+*.ipynb
 
-# IDEs
+# ============================================
+# IDEs y EDITORES
+# ============================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
 
-# Modelos entrenados (pueden ser grandes)
+# ============================================
+# MODELOS ENTRENADOS (No subir a GitHub)
+# ============================================
 models/*.h5
+models/*.hdf5
 models/*.pkl
+models/*.pickle
+models/*.joblib
 models/*.pt
 models/*.pth
+models/*.onnx
+models/*.pb
+models/*.tflite
 
-# Datos (evitar subir imágenes grandes)
+# Pero mantener la carpeta models/
+!models/.gitkeep
+
+# ============================================
+# DATOS (CRÍTICO: No subir imágenes)
+# ============================================
+# Ignorar TODA la carpeta data/ y su contenido
+data/
+data/**/*
+
+# Específicamente ignorar subcarpetas de datos
+data/dataset/
+data/referencia/
+data/pruebas/
+data/test_images/
 data/raw/
 data/processed/
-!data/raw/.gitkeep
-!data/processed/.gitkeep
 
-# Outputs
+# Ignorar todos los tipos de imágenes en cualquier lugar
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.ico
+*.svg
+*.webp
+
+# Pero permitir imágenes de documentación si las necesitas
+!docs/**/*.png
+!docs/**/*.jpg
+!README_images/*.png
+
+# Mantener estructura de carpetas (opcional)
+!data/.gitkeep
+!data/dataset/.gitkeep
+!data/referencia/.gitkeep
+!data/pruebas/.gitkeep
+
+# ============================================
+# OUTPUTS y LOGS
+# ============================================
 output/
+outputs/
+results/
 logs/
 *.log
+debug_*.png
+debug_*.jpg
 
-# Sistema operativo
+# ============================================
+# SISTEMA OPERATIVO
+# ============================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
-# Archivos temporales
+# ============================================
+# ARCHIVOS TEMPORALES
+# ============================================
 *.tmp
+*.temp
 *.bak
+*.backup
+*~
+*.cache
+.cache/
 
-# Modelos entrenados
+# ============================================
+# CONFIGURACIÓN SENSIBLE
+# ============================================
+.env
+.env.local
+secrets.yaml
+credentials.json
+
+# ============================================
+# TENSORFLOW/KERAS
+# ============================================
 *.h5
 *.hdf5
-*.pkl
-*.pickle
-*.joblib
-*.pt
-*.pth
-*.onnx
-*.pb
+checkpoints/
+saved_models/
+tensorboard/
+
+# ============================================
+# ARCHIVOS GRANDES (por si acaso)
+# ============================================
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+*.gz
