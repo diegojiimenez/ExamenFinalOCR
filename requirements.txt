@@ -32,7 +32,8 @@ seaborn>=0.12.0                   # Visualización estadística
 pandas>=2.0.0                     # Manejo de datos tabulares
 pyyaml>=6.0                       # Lectura de archivos de configuración
 tqdm>=4.65.0                      # Barras de progreso
-python-dateutil>=2.8.2            # Manejo de fechas
+python-dateutil>=2.8.2     
+scikit-learn==1.3.0       # Manejo de fechas
 
 # ========================================
 # OPCIONAL - MEJORAS

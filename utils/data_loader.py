@@ -19,7 +19,7 @@ class DataLoader:
     
     def get_dataset_images(self, dataset_name='all'):
         """
-        Obtiene imágenes de los datasets
+        Obtiene imágenes de los datasets con manejo correcto de rutas UTF-8
         
         Args:
             dataset_name: 'dataset_ia', 'dataset_completo', 'dataset_completo2' o 'all'
@@ -32,7 +32,9 @@ class DataLoader:
             all_images = []
             for name, path in datasets.items():
                 if path and path.exists():
-                    all_images.extend(self._scan_directory(path))
+                    images = self._scan_directory(path)
+                    print(f"  📁 {name}: {len(images)} imágenes")
+                    all_images.extend(images)
             return all_images
         else:
             path = self.config.get_path(dataset_name)
@@ -76,6 +78,7 @@ class DataLoader:
     def _scan_directory(self, directory):
         """
         Escanea un directorio recursivamente buscando imágenes
+        CON MANEJO CORRECTO DE UTF-8
         
         Args:
             directory: Path del directorio
@@ -86,25 +89,48 @@ class DataLoader:
         image_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.gif'}
         images = []
         
-        for root, dirs, files in os.walk(directory):
-            for file in files:
-                if Path(file).suffix.lower() in image_extensions:
-                    images.append(Path(root) / file)
+        try:
+            # Usar os.walk con encoding correcto
+            for root, dirs, files in os.walk(str(directory)):
+                for file in files:
+                    try:
+                        # Construir ruta completa con manejo de encoding
+                        file_path = Path(root) / file
+                        
+                        # Verificar extensión
+                        if file_path.suffix.lower() in image_extensions:
+                            # Verificar que el archivo existe y es accesible
+                            if file_path.exists() and os.access(str(file_path), os.R_OK):
+                                images.append(file_path)
+                    except (UnicodeDecodeError, OSError) as e:
+                        # Saltar archivos con problemas de encoding
+                        continue
+        except Exception as e:
+            print(f"⚠️  Error al escanear directorio {directory}: {e}")
         
         return sorted(images)
     
     def load_image(self, image_path, mode='L'):
         """
-        Carga una imagen
+        Carga una imagen con manejo de errores UTF-8
         
         Args:
             image_path: Ruta de la imagen
             mode: Modo de PIL ('L' para escala de grises, 'RGB' para color)
         
         Returns:
-            Imagen de PIL
+            Imagen de PIL o None si falla
         """
-        return Image.open(image_path).convert(mode)
+        try:
+            # Usar Path para manejo correcto de rutas
+            path = Path(image_path)
+            if not path.exists():
+                return None
+            
+            return Image.open(str(path)).convert(mode)
+        except Exception as e:
+            print(f"⚠️  Error al cargar {image_path}: {e}")
+            return None
     
     def get_dataset_stats(self):
         """Obtiene estadísticas de los datasets"""
