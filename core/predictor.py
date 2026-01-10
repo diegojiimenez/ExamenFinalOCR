@@ -1,6 +1,5 @@
 """
-Motor de predicción universal - ADAPTADO DEL PROYECTO ORIGINAL
-Compatible con modelo entrenado 32x32, 62 clases
+Predictor con visualización diferente y depuración mejorada
 """
 
 import cv2
@@ -8,7 +7,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+from matplotlib.patches import FancyBboxPatch
 from tensorflow.keras.models import load_model
 from pathlib import Path
 
@@ -18,9 +17,7 @@ from utils.dataset import LABEL_MAP, preprocess_char_unified
 
 
 class UniversalPredictor:
-    """
-    Predictor que replica exactamente la lógica del proyecto original
-    """
+    """Predictor con visualización personalizada"""
     
     def __init__(self, model_path=None):
         if model_path is None:
@@ -29,92 +26,100 @@ class UniversalPredictor:
         self.model_manager = ModelManager(model_path)
         self.model = self.model_manager.load_model()
         
-        # Configuración del modelo
-        self.input_size = 32  # Forzar a 32x32
+        self.input_size = 32
         self.num_classes = 62
         
-        print(f"📊 Modelo cargado:")
-        print(f"   Input size: {self.input_size}x{self.input_size}")
-        print(f"   Clases: {self.num_classes}")
+        print(f"📊 Modelo: {self.input_size}x{self.input_size}, {self.num_classes} clases")
+        
+        # 🔍 VERIFICAR LABEL_MAP
+        print("\n🔍 Verificando LABEL_MAP:")
+        for i in [0, 25, 26, 51, 52, 61]:
+            print(f"   {i} → '{LABEL_MAP.get(i, '?')}' (tipo: {type(LABEL_MAP.get(i)).__name__})")
     
     def predict(self, image_path, debug=False, visualize=False):
-        """
-        Predicción usando la lógica EXACTA del proyecto original
-        """
-        print(f"\n🔍 Procesando: {image_path}")
+        """Predicción con debug mejorado"""
+        print(f"\n{'='*70}")
+        print(f"🔍 PROCESANDO: {Path(image_path).name}")
+        print('='*70)
         
-        # Verificar archivo
         if not Path(image_path).exists():
-            raise ValueError(f"No se encuentra: {image_path}")
+            raise ValueError(f"❌ No existe: {image_path}")
         
-        # Cargar imagen en escala de grises
+        # Cargar imagen
         original = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
         if original is None:
-            raise ValueError(f"No se pudo cargar: {image_path}")
+            raise ValueError(f"❌ No se pudo cargar: {image_path}")
         
         h, w = original.shape
-        print(f"📐 Imagen: {w}x{h}")
+        print(f"📐 Dimensiones: {w}x{h}")
         
-        # Detectar tipo de escritura (del original)
+        # Detectar tipo
         variance = np.var(original)
         is_handwritten = variance > 800
-        print(f"📝 Tipo: {'Manuscrita' if is_handwritten else 'Digital'} (var: {variance:.1f})")
+        print(f"📝 Tipo: {'✍️  Manuscrita' if is_handwritten else '🖨️  Digital'} (var={variance:.0f})")
         
-        # PREPROCESAMIENTO ADAPTATIVO (del original)
+        # Preprocesamiento adaptativo
+        print("\n⚙️  PREPROCESAMIENTO:")
         if is_handwritten:
-            # Manuscritas: preprocesamiento suave
+            print("   → CLAHE + Gaussian + Adaptative Threshold")
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
             enhanced = clahe.apply(original)
             blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
             binary = cv2.adaptiveThreshold(
-                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                 cv2.THRESH_BINARY_INV, 15, 8
             )
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
             binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
         else:
-            # Digitales: binarización estándar
+            print("   → Otsu Threshold")
             _, binary = cv2.threshold(
-                original, 0, 255, 
+                original, 0, 255,
                 cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
             )
         
-        # SEGMENTACIÓN (del original)
+        print(f"   ✓ Imagen binaria: {binary.shape}, únicos: {np.unique(binary)}")
+        
+        # Segmentación
+        print("\n🔍 SEGMENTACIÓN:")
         contours, _ = cv2.findContours(
             binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
+        print(f"   Contornos encontrados: {len(contours)}")
         
-        # Filtros adaptativos
+        # Filtrado
         char_boxes = []
-        for contour in contours:
+        for i, contour in enumerate(contours):
             x, y, cw, ch = cv2.boundingRect(contour)
             area = cw * ch
             aspect_ratio = cw / ch if ch > 0 else 0
             
             if is_handwritten:
-                # Filtros permisivos para manuscritas
-                min_area, min_dimension = 20, 5
-                max_width, max_height = w * 0.6, h * 0.9
+                min_area, min_dim = 20, 5
+                max_w, max_h = w * 0.6, h * 0.9
                 aspect_range = (0.05, 6.0)
             else:
-                # Filtros estrictos para digitales
-                min_area, min_dimension = 50, 8
-                max_width, max_height = w * 0.3, h * 0.8
+                min_area, min_dim = 50, 8
+                max_w, max_h = w * 0.3, h * 0.8
                 aspect_range = (0.1, 3.0)
             
-            if (area >= min_area and 
-                cw >= min_dimension and ch >= min_dimension and
-                cw <= max_width and ch <= max_height and
-                aspect_range[0] <= aspect_ratio <= aspect_range[1]):
+            valid = (area >= min_area and
+                    cw >= min_dim and ch >= min_dim and
+                    cw <= max_w and ch <= max_h and
+                    aspect_range[0] <= aspect_ratio <= aspect_range[1])
+            
+            if valid:
                 char_boxes.append((x, y, cw, ch))
+                if debug and i < 3:
+                    print(f"   ✓ Contorno {i}: x={x}, y={y}, w={cw}, h={ch}, area={area}, ar={aspect_ratio:.2f}")
         
         num_chars = len(char_boxes)
-        print(f"🔍 Caracteres detectados: {num_chars}")
+        print(f"   Caracteres válidos: {num_chars}")
         
         if not char_boxes:
             return "", {'text': '', 'type': 'VACÍO', 'num_chars': 0}
         
-        # DETECCIÓN DE TIPO DE CONTENIDO
+        # Tipo de contenido
         if num_chars == 1:
             content_type = "LETRA"
         elif 2 <= num_chars <= 6:
@@ -122,17 +127,20 @@ class UniversalPredictor:
         else:
             content_type = "FRASE"
         
-        print(f"📋 Tipo: {content_type}")
+        print(f"📋 Tipo detectado: {content_type}")
         
-        # ORDENAMIENTO INTELIGENTE (del original)
+        # Ordenar
         char_boxes = self._smart_sort(char_boxes, content_type)
         
         # RECONOCIMIENTO
+        print(f"\n🎯 RECONOCIMIENTO ({num_chars} caracteres):")
+        print("-" * 70)
+        
         recognized_chars = []
         confidences = []
         
         for i, (x, y, cw, ch) in enumerate(char_boxes):
-            # Extraer carácter con margen
+            # Extraer con margen
             margin = max(2, min(cw, ch) // 8)
             y_start = max(0, y - margin)
             y_end = min(h, y + ch + margin)
@@ -141,13 +149,12 @@ class UniversalPredictor:
             
             char_img = original[y_start:y_end, x_start:x_end]
             
-            # Preprocesamiento del carácter
-            char_processed = preprocess_char_unified(
-                char_img, 
-                debug=(debug and i < 2)
-            )
+            if debug and i < 3:
+                print(f"\n   [{i+1}] Región: ({x_start}, {y_start}) → ({x_end}, {y_end})")
+                print(f"       Tamaño extraído: {char_img.shape}")
             
-            # Preparar para predicción: (1, 32, 32, 1)
+            # Preprocesar
+            char_processed = preprocess_char_unified(char_img, debug=(debug and i < 3))
             char_input = char_processed.reshape(1, 32, 32, 1)
             
             # Predecir
@@ -155,12 +162,15 @@ class UniversalPredictor:
             predicted_class = np.argmax(prediction)
             confidence = np.max(prediction)
             
+            # 🔍 TOP 3 predicciones
+            top3_indices = np.argsort(prediction[0])[-3:][::-1]
+            
             # Preprocesamiento alternativo si confianza baja
             if confidence < 0.3:
                 char_alt = cv2.resize(char_img, (32, 32))
                 if np.mean(char_alt) > 127:
                     char_alt = 255 - char_alt
-                char_alt = char_alt / 255.0
+                char_alt = (char_alt / 255.0).astype('float32')
                 char_alt = np.where(char_alt > 0.15, 1.0, 0.0)
                 
                 char_alt_input = char_alt.reshape(1, 32, 32, 1)
@@ -171,27 +181,38 @@ class UniversalPredictor:
                     prediction = prediction_alt
                     predicted_class = np.argmax(prediction)
                     confidence = confidence_alt
-                    if debug:
-                        print(f"   🔄 Preprocesamiento alternativo: char {i+1}")
+                    top3_indices = np.argsort(prediction[0])[-3:][::-1]
+                    if debug and i < 3:
+                        print(f"       🔄 Preprocesamiento alternativo aplicado")
             
             # Decodificar
             predicted_char = LABEL_MAP.get(predicted_class, '?')
             recognized_chars.append(predicted_char)
             confidences.append(confidence)
             
-            print(f"   Char {i+1}: '{predicted_char}' ({confidence:.1%})")
+            # Mostrar resultado
+            color = '🟢' if confidence > 0.8 else ('🟡' if confidence > 0.5 else '🔴')
+            print(f"   {color} [{i+1:2d}] '{predicted_char}' ({confidence:.1%}) | clase={predicted_class}")
+            
+            if debug and i < 3:
+                print(f"       Top 3: ", end="")
+                for idx in top3_indices:
+                    char = LABEL_MAP.get(idx, '?')
+                    conf = prediction[0][idx]
+                    print(f"'{char}':{conf:.1%} ", end="")
+                print()
         
-        # CONSTRUCCIÓN DE TEXTO (del original)
+        # Construir texto
         if content_type == "LETRA":
             phrase = "".join(recognized_chars)
         elif content_type == "PALABRA":
             phrase = "".join(recognized_chars)
-        else:  # FRASE
-            phrase = self._build_phrase_with_spaces(
-                recognized_chars, char_boxes
-            )
+        else:
+            phrase = self._build_phrase_with_spaces(recognized_chars, char_boxes)
         
-        print(f"\n📝 Resultado: '{phrase}'")
+        print("-" * 70)
+        print(f"📝 RESULTADO FINAL: '{phrase}'")
+        print('='*70)
         
         info = {
             'text': phrase,
@@ -202,10 +223,9 @@ class UniversalPredictor:
             'recognized_chars': recognized_chars
         }
         
-        # Visualización si se solicita
         if visualize:
-            fig = self._create_visualization(
-                original, char_boxes, recognized_chars, 
+            fig = self._create_modern_visualization(
+                original, char_boxes, recognized_chars,
                 confidences, phrase, content_type
             )
             return phrase, info, fig
@@ -213,11 +233,10 @@ class UniversalPredictor:
         return phrase, info
     
     def _smart_sort(self, boxes, content_type):
-        """Ordenamiento inteligente de caracteres"""
+        """Ordenamiento inteligente"""
         if not boxes or content_type == "LETRA":
             return boxes
         
-        # Agrupar por líneas
         avg_height = np.mean([h for _, _, _, h in boxes])
         line_tolerance = avg_height * 0.5
         
@@ -237,14 +256,10 @@ class UniversalPredictor:
             if not placed:
                 lines.append([box])
         
-        # Ordenar líneas por Y
         lines.sort(key=lambda line: np.mean([b[1] for b in line]))
-        
-        # Ordenar caracteres por X dentro de cada línea
         for line in lines:
             line.sort(key=lambda b: b[0])
         
-        # Concatenar
         result = []
         for line in lines:
             result.extend(line)
@@ -252,13 +267,12 @@ class UniversalPredictor:
         return result
     
     def _build_phrase_with_spaces(self, chars, boxes):
-        """Construye frase con detección de espacios"""
+        """Construcción de frase con espacios"""
         if len(boxes) <= 1:
             return "".join(chars)
         
         phrase = ""
-        char_widths = [w for _, _, w, _ in boxes]
-        avg_char_width = np.mean(char_widths)
+        avg_char_width = np.mean([w for _, _, w, _ in boxes])
         
         for i, char in enumerate(chars):
             phrase += char
@@ -278,91 +292,119 @@ class UniversalPredictor:
                 space_threshold = avg_char_width * 0.7
                 avg_height = np.mean([b[3] for b in boxes])
                 
-                if vertical_gap > avg_height * 0.3:  # Nueva línea
+                if vertical_gap > avg_height * 0.3:
                     phrase += " "
-                elif horizontal_gap > space_threshold:  # Espacio
+                elif horizontal_gap > space_threshold:
                     phrase += " "
         
-        # Limpiar espacios múltiples
         return ' '.join(phrase.split())
     
-    def _create_visualization(self, image, boxes, chars, confs, text, content_type):
-        """Crea visualización tipo Examen Final"""
-        # Convertir a RGB si es necesario
+    def _create_modern_visualization(self, image, boxes, chars, confs, text, content_type):
+        """🎨 VISUALIZACIÓN MODERNA Y DIFERENTE"""
         if len(image.shape) == 2:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
         else:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-        fig, ax = plt.subplots(1, 1, figsize=(16, 8))
-        ax.imshow(image_rgb)
+        # Fondo oscuro
+        fig = plt.figure(figsize=(18, 10), facecolor='#1e1e1e')
+        ax = plt.subplot(111, facecolor='#2d2d30')
+        
+        ax.imshow(image_rgb, cmap='gray')
+        
+        # Paleta de colores moderna
+        colors = {
+            'high': '#00ff88',    # Verde neón
+            'medium': '#ffd700',  # Dorado
+            'low': '#ff6b35',     # Naranja
+            'verylow': '#ff0055'  # Rosa
+        }
         
         for i, ((x, y, w, h), char, conf) in enumerate(zip(boxes, chars, confs)):
             # Color según confianza
             if conf > 0.8:
-                color = 'lime'
+                color = colors['high']
+                style = 'round,pad=0.3'
             elif conf > 0.5:
-                color = 'yellow'
+                color = colors['medium']
+                style = 'round,pad=0.3'
             elif conf > 0.2:
-                color = 'orange'
+                color = colors['low']
+                style = 'round,pad=0.3'
             else:
-                color = 'red'
+                color = colors['verylow']
+                style = 'round,pad=0.3'
             
-            # Dibujar rectángulo
-            rect = patches.Rectangle(
-                (x, y), w, h, linewidth=2, 
-                edgecolor=color, facecolor='none'
+            # Rectángulo con esquinas redondeadas
+            fancy_box = FancyBboxPatch(
+                (x, y), w, h,
+                boxstyle="round,pad=2",
+                linewidth=3,
+                edgecolor=color,
+                facecolor='none',
+                alpha=0.9
             )
-            ax.add_patch(rect)
+            ax.add_patch(fancy_box)
             
-            # Texto con predicción
+            # Etiqueta con diseño moderno
+            label_text = f"#{i+1}\n'{char}'\n{conf:.0%}"
+            
             ax.text(
-                x + w//2, y - 5, 
-                f"{i+1}: {char}\n{conf:.1%}",
-                fontsize=10, fontweight='bold',
-                color='blue', ha='center', va='bottom',
+                x + w/2, y - 15,
+                label_text,
+                fontsize=11,
+                fontweight='bold',
+                color='white',
+                ha='center',
+                va='bottom',
                 bbox=dict(
-                    boxstyle="round,pad=0.2", 
-                    facecolor="white", 
-                    alpha=0.9
-                )
+                    boxstyle='round,pad=0.5',
+                    facecolor=color,
+                    edgecolor='white',
+                    linewidth=2,
+                    alpha=0.95
+                ),
+                zorder=100
             )
         
-        # Título
+        # Título moderno
         emojis = {"LETRA": "🔤", "PALABRA": "📝", "FRASE": "📄"}
-        title = f"{emojis[content_type]} Predicción ({content_type}): {text}"
-        ax.set_title(title, fontsize=18, fontweight='bold')
-        ax.axis('off')
+        title = f"{emojis[content_type]} RECONOCIMIENTO OCR | Tipo: {content_type}\nTexto: {text}"
         
+        ax.set_title(
+            title,
+            fontsize=20,
+            fontweight='bold',
+            color='#00d9ff',
+            pad=25,
+            bbox=dict(
+                boxstyle='round,pad=1',
+                facecolor='#1e1e1e',
+                edgecolor='#00d9ff',
+                linewidth=3
+            )
+        )
+        
+        ax.axis('off')
         plt.tight_layout()
+        
         return fig
     
     def show_visualization(self, image_path):
-        """Muestra visualización en ventana"""
-        text, info, fig = self.predict(
-            image_path, debug=True, visualize=True
-        )
+        """Muestra visualización"""
+        text, info, fig = self.predict(image_path, debug=True, visualize=True)
         plt.show()
         return text, info
 
 
 def predict_cli(image_path, visualize=False):
-    """Predicción desde CLI"""
+    """CLI con debug completo"""
     predictor = UniversalPredictor()
-    
-    print(f"\n{'='*60}")
-    print(f"🔍 Procesando: {Path(image_path).name}")
-    print('='*60)
     
     if visualize:
         text, info = predictor.show_visualization(image_path)
     else:
         text, info = predictor.predict(image_path, debug=True)
-    
-    print(f"\n{'='*60}")
-    print(f"✅ RESULTADO: '{text}'")
-    print(f"📊 Tipo: {info['type']} | Caracteres: {info['num_chars']}")
-    print('='*60 + "\n")
     
     return text
 
