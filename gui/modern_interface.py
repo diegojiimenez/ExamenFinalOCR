@@ -1,31 +1,29 @@
 """
-Interfaz gráfica moderna y mejorada
+GUI con visualización estilo Examen Final
 """
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
-import os
+import matplotlib
+matplotlib.use('TkAgg')
+
 from core.predictor import UniversalPredictor
 
 
 class ModernOCRApp:
-    """
-    Aplicación GUI moderna con preview de imagen
-    """
+    """GUI con visualización integrada"""
     
     def __init__(self, root):
         self.root = root
         self.root.title("🔤 OCR Inteligente - Sistema de Reconocimiento Universal")
-        self.root.geometry("700x600")  # 🔄 Altura aumentada
-        self.root.resizable(False, False)
+        self.root.geometry("900x650")
         self.root.configure(bg='#1e1e1e')
         
-        # Inicializar predictor
         try:
             self.predictor = UniversalPredictor()
             self.model_ready = True
-        except FileNotFoundError as e:
+        except:
             self.model_ready = False
             self.predictor = None
         
@@ -33,178 +31,136 @@ class ModernOCRApp:
         self.setup_ui()
     
     def setup_ui(self):
-        """Configura la interfaz de usuario"""
+        """Configurar interfaz"""
         
-        # === HEADER ===
-        header_frame = tk.Frame(self.root, bg='#2d2d30', height=80)
-        header_frame.pack(fill=tk.X, pady=(0, 20))
+        # Header
+        header = tk.Frame(self.root, bg='#2d2d30', height=80)
+        header.pack(fill=tk.X)
         
-        title = tk.Label(
-            header_frame, 
-            text="🔤 OCR INTELIGENTE", 
+        tk.Label(
+            header, text="🔤 OCR INTELIGENTE",
             font=("Segoe UI", 22, "bold"),
-            fg="#00d9ff", 
-            bg='#2d2d30'
-        )
-        title.pack(pady=15)
+            fg="#00d9ff", bg='#2d2d30'
+        ).pack(pady=15)
         
-        subtitle = tk.Label(
-            header_frame, 
-            text="Sistema de Reconocimiento Universal de Texto",
+        tk.Label(
+            header, text="Sistema de Reconocimiento Universal de Texto",
             font=("Segoe UI", 10),
-            fg="#cccccc", 
-            bg='#2d2d30'
-        )
-        subtitle.pack()
+            fg="#cccccc", bg='#2d2d30'
+        ).pack()
         
-        # === MAIN CONTENT ===
-        content_frame = tk.Frame(self.root, bg='#1e1e1e')
-        content_frame.pack(fill=tk.BOTH, expand=True, padx=30)
+        # Content
+        content = tk.Frame(self.root, bg='#1e1e1e')
+        content.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
         
-        # Panel de imagen
+        # Preview
         self.image_panel = tk.Label(
-            content_frame,
-            text="📁 Ninguna imagen cargada",
-            font=("Segoe UI", 11),
-            fg="#888888",
-            bg='#252526',
-            width=60,
-            height=10,
-            relief=tk.SOLID,
-            bd=1
+            content, text="📁 Ninguna imagen cargada",
+            font=("Segoe UI", 11), fg="#888888",
+            bg='#252526', width=70, height=12,
+            relief=tk.SOLID, bd=1
         )
         self.image_panel.pack(pady=(0, 15))
         
-        # Botones principales
-        button_frame = tk.Frame(content_frame, bg='#1e1e1e')
-        button_frame.pack(pady=10)
+        # Botones
+        btn_frame = tk.Frame(content, bg='#1e1e1e')
+        btn_frame.pack(pady=10)
         
-        self.btn_select = tk.Button(
-            button_frame,
-            text="📂 SELECCIONAR IMAGEN",
+        tk.Button(
+            btn_frame, text="📂 SELECCIONAR",
             command=self.select_image,
-            bg='#0e639c',
-            fg='white',
+            bg='#0e639c', fg='white',
             font=("Segoe UI", 11, "bold"),
-            width=22,
-            height=2,
-            relief=tk.FLAT,
-            cursor='hand2'
-        )
-        self.btn_select.grid(row=0, column=0, padx=10)
+            width=18, height=2,
+            relief=tk.FLAT, cursor='hand2'
+        ).grid(row=0, column=0, padx=5)
         
-        self.btn_recognize = tk.Button(
-            button_frame,
-            text="🎯 RECONOCER TEXTO",
+        tk.Button(
+            btn_frame, text="🎯 RECONOCER",
             command=self.recognize_text,
-            bg='#16825d',
-            fg='white',
+            bg='#16825d', fg='white',
             font=("Segoe UI", 11, "bold"),
-            width=22,
-            height=2,
-            relief=tk.FLAT,
-            cursor='hand2',
-            state=tk.DISABLED if not self.model_ready else tk.NORMAL
-        )
-        self.btn_recognize.grid(row=0, column=1, padx=10)
+            width=18, height=2,
+            relief=tk.FLAT, cursor='hand2',
+            state=tk.NORMAL if self.model_ready else tk.DISABLED
+        ).grid(row=0, column=1, padx=5)
         
-        # Panel de resultados
+        tk.Button(
+            btn_frame, text="🔍 VISUALIZAR",
+            command=self.show_visualization,
+            bg='#8e44ad', fg='white',
+            font=("Segoe UI", 11, "bold"),
+            width=18, height=2,
+            relief=tk.FLAT, cursor='hand2',
+            state=tk.NORMAL if self.model_ready else tk.DISABLED
+        ).grid(row=0, column=2, padx=5)
+        
+        # Resultado
         result_frame = tk.LabelFrame(
-            content_frame,
-            text="📝 Resultado del Reconocimiento",
+            content, text="📝 Resultado",
             font=("Segoe UI", 10, "bold"),
-            fg="#00d9ff",
-            bg='#252526',
+            fg="#00d9ff", bg='#252526',
             relief=tk.FLAT
         )
-        result_frame.pack(fill=tk.BOTH, expand=True, pady=15)
+        result_frame.pack(fill=tk.X, pady=15)
         
         self.result_text = tk.Text(
-            result_frame,
-            height=4,
+            result_frame, height=4,
             font=("Consolas", 14),
-            bg='#1e1e1e',
-            fg='#d4d4d4',
-            relief=tk.FLAT,
-            padx=15,
-            pady=15
+            bg='#1e1e1e', fg='#d4d4d4',
+            relief=tk.FLAT, padx=15, pady=15
         )
-        self.result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.result_text.pack(fill=tk.X, padx=10, pady=10)
         
-        # 🆕 BOTÓN DE ENTRENAMIENTO
-        separator = tk.Frame(content_frame, height=1, bg="#3d3d3d")
-        separator.pack(fill=tk.X, pady=10)
+        # Footer
+        status_text = "✅ Modelo listo" if self.model_ready else "❌ Sin modelo"
+        status_color = "#16825d" if self.model_ready else "#e74856"
         
-        self.btn_train = tk.Button(
-            content_frame,
-            text="🔄 Re-entrenar Modelo",
-            command=self.train_model,
-            bg='#e67e22',
-            fg='white',
-            font=("Segoe UI", 10),
-            width=25,
-            height=1,
-            relief=tk.FLAT,
-            cursor='hand2'
-        )
-        self.btn_train.pack(pady=5)
-        
-        # === FOOTER ===
-        footer = tk.Label(
-            self.root,
-            text="💡 Condiciones óptimas: Fondo blanco, texto negro, letra imprenta, alto contraste",
-            font=("Segoe UI", 8),
-            fg="#666666",
-            bg='#1e1e1e'
-        )
-        footer.pack(side=tk.BOTTOM, pady=10)
-        
-        # Estado del modelo
-        status_text = "✅ Modelo cargado" if self.model_ready else "⚠️ Modelo no encontrado - Ejecuta entrenamiento"
-        status_color = "#16825d" if self.model_ready else "#e67e22"
-        
-        self.status_label = tk.Label(
-            self.root,
-            text=status_text,
+        tk.Label(
+            self.root, text=status_text,
             font=("Segoe UI", 9),
-            fg=status_color,
-            bg='#1e1e1e'
-        )
-        self.status_label.pack(side=tk.BOTTOM)
+            fg=status_color, bg='#1e1e1e'
+        ).pack(side=tk.BOTTOM, pady=10)
+        
+        tk.Label(
+            self.root,
+            text="💡 Óptimo: fondo blanco, texto negro, imprenta, alto contraste",
+            font=("Segoe UI", 8),
+            fg="#666666", bg='#1e1e1e'
+        ).pack(side=tk.BOTTOM, pady=5)
     
     def select_image(self):
-        """Selecciona una imagen para procesar"""
+        """Seleccionar imagen"""
         filepath = filedialog.askopenfilename(
             title="Seleccionar imagen",
             filetypes=[
                 ("Imágenes", "*.png *.jpg *.jpeg *.bmp"),
-                ("Todos los archivos", "*.*")
+                ("Todos", "*.*")
             ]
         )
         
         if filepath:
             self.current_image_path = filepath
             self.display_image(filepath)
-            if self.model_ready:
-                self.btn_recognize.config(state=tk.NORMAL)
             self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(1.0, f"Imagen: {filepath}")
     
     def display_image(self, filepath):
-        """Muestra preview de la imagen"""
+        """Mostrar preview"""
         try:
             img = Image.open(filepath)
-            img.thumbnail((400, 200), Image.Resampling.LANCZOS)
+            img.thumbnail((600, 300), Image.Resampling.LANCZOS)
             photo = ImageTk.PhotoImage(img)
             
             self.image_panel.config(image=photo, text="")
             self.image_panel.image = photo
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo cargar la imagen:\n{str(e)}")
+            messagebox.showerror("Error", f"No se pudo cargar:\n{e}")
     
     def recognize_text(self):
-        """Ejecuta el reconocimiento OCR"""
+        """Reconocer sin visualización"""
         if not self.current_image_path or not self.model_ready:
-            messagebox.showwarning("Advertencia", "Primero debes entrenar el modelo")
+            messagebox.showwarning("Advertencia", "Selecciona imagen")
             return
         
         self.result_text.delete(1.0, tk.END)
@@ -212,98 +168,44 @@ class ModernOCRApp:
         self.root.update()
         
         try:
-            # Ejecutar predicción
-            text, info = self.predictor.predict(self.current_image_path, debug=False)
+            text, info = self.predictor.predict(
+                self.current_image_path, debug=False
+            )
             
-            # Mostrar resultado
             self.result_text.delete(1.0, tk.END)
             self.result_text.insert(1.0, f"'{text}'")
             
-            # Información adicional
-            content_emojis = {"LETRA": "🔤", "PALABRA": "📝", "FRASE": "📄", "VACÍO": "❌"}
-            emoji = content_emojis.get(info['type'], "📋")
+            emoji = {"LETRA": "🔤", "PALABRA": "📝", "FRASE": "📄"}.get(info['type'], "📋")
             
             messagebox.showinfo(
-                "Reconocimiento Exitoso",
+                "Resultado",
                 f"{emoji} Tipo: {info['type']}\n"
                 f"🔍 Caracteres: {info['num_chars']}\n"
                 f"📝 Texto: '{text}'"
             )
-            
         except Exception as e:
-            self.result_text.delete(1.0, tk.END)
-            self.result_text.insert(1.0, "❌ Error en el reconocimiento")
-            messagebox.showerror("Error", f"Error durante el reconocimiento:\n{str(e)}")
+            messagebox.showerror("Error", str(e))
     
-    def train_model(self):
-        """🆕 Entrena el modelo desde la GUI"""
-        response = messagebox.askyesno(
-            "Entrenar Modelo",
-            "¿Deseas entrenar el modelo?\n\n"
-            "Esto puede tardar varios minutos.\n"
-            "Se sobrescribirá el modelo actual si existe."
-        )
-        
-        if not response:
+    def show_visualization(self):
+        """Mostrar visualización completa"""
+        if not self.current_image_path or not self.model_ready:
+            messagebox.showwarning("Advertencia", "Selecciona imagen")
             return
         
         try:
-            from core.model_training import train_model
-            
-            # Mostrar ventana de progreso
-            progress_window = tk.Toplevel(self.root)
-            progress_window.title("Entrenamiento en Progreso")
-            progress_window.geometry("400x150")
-            progress_window.configure(bg='#1e1e1e')
-            progress_window.resizable(False, False)
-            
-            tk.Label(
-                progress_window,
-                text="🔄 Entrenando modelo...",
-                font=("Segoe UI", 14, "bold"),
-                fg="#00d9ff",
-                bg='#1e1e1e'
-            ).pack(pady=20)
-            
-            tk.Label(
-                progress_window,
-                text="Por favor espera, esto puede tomar varios minutos.",
-                font=("Segoe UI", 10),
-                fg="#cccccc",
-                bg='#1e1e1e'
-            ).pack(pady=10)
-            
-            progress_window.update()
-            
-            # Entrenar modelo
-            train_model()
-            
-            progress_window.destroy()
-            
-            # Actualizar estado
-            try:
-                self.predictor = UniversalPredictor()
-                self.model_ready = True
-                self.btn_recognize.config(state=tk.NORMAL)
-                self.status_label.config(
-                    text="✅ Modelo entrenado exitosamente",
-                    fg="#16825d"
-                )
-            except:
-                pass
-            
-            messagebox.showinfo(
-                "Entrenamiento Completo",
-                "✅ El modelo se ha entrenado exitosamente.\n\n"
-                "Ya puedes usar el reconocimiento de texto."
+            text, info = self.predictor.show_visualization(
+                self.current_image_path
             )
             
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(1.0, f"'{text}'")
+            
         except Exception as e:
-            messagebox.showerror("Error", f"Error durante el entrenamiento:\n{str(e)}")
+            messagebox.showerror("Error", str(e))
 
 
 def launch_gui():
-    """Lanza la interfaz gráfica"""
+    """Lanzar GUI"""
     root = tk.Tk()
     app = ModernOCRApp(root)
     root.mainloop()

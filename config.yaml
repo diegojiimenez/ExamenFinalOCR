@@ -1,9 +1,9 @@
 # Configuración del Sistema OCR
 
 model:
-  path: "models/trained_model.h5"  # 🔄 CAMBIADO: best_model → trained_model
-  input_shape: [28, 28, 1]
-  char_map: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  path: "models/trained_model.h5"
+  input_shape: [32, 32, 1]  # 🔄 CAMBIADO: 28x28 → 32x32
+  char_map: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"  # 62 caracteres
 
 preprocessing:
   blur_kernel: 5
@@ -22,7 +22,6 @@ training:
   test_split: 0.2
 
 paths:
-  # Carpetas principales de datos
   data_root: "data/"
   dataset: "data/dataset/"
   referencia: "data/referencia/"
@@ -30,12 +29,10 @@ paths:
   test_images: "data/pruebas/"
   output: "output/"
   
-  # Sub-carpetas de dataset
   dataset_ia: "data/dataset/DATASET_IA/"
   dataset_completo: "data/dataset/datasetCompleto/"
   dataset_completo2: "data/dataset/DatasetCompleto2/"
   
-  # Sub-carpetas de referencia
   mayusculas: "data/referencia/Mayúsculas/"
   minusculas: "data/referencia/Minúsculas/"
   numeros: "data/referencia/Números/"
