@@ -1,5 +1,5 @@
 """
-Predictor con visualización diferente y depuración mejorada
+Predictor IDÉNTICO al proyecto original
 """
 
 import cv2
@@ -8,16 +8,22 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch
-from tensorflow.keras.models import load_model
 from pathlib import Path
 
 from core.model_manager import ModelManager
 from utils.config import config
 from utils.dataset import LABEL_MAP, preprocess_char_unified
 
+# Importar segmentación inteligente si está disponible
+try:
+    from utils.enhanced_preprocessing import intelligent_segmentation
+    USING_INTELLIGENT_SEG = True
+except ImportError:
+    USING_INTELLIGENT_SEG = False
+
 
 class UniversalPredictor:
-    """Predictor con visualización personalizada"""
+    """Predictor con lógica EXACTA del proyecto original"""
     
     def __init__(self, model_path=None):
         if model_path is None:
@@ -31,13 +37,15 @@ class UniversalPredictor:
         
         print(f"📊 Modelo: {self.input_size}x{self.input_size}, {self.num_classes} clases")
         
-        # 🔍 VERIFICAR LABEL_MAP
-        print("\n🔍 Verificando LABEL_MAP:")
-        for i in [0, 25, 26, 51, 52, 61]:
-            print(f"   {i} → '{LABEL_MAP.get(i, '?')}' (tipo: {type(LABEL_MAP.get(i)).__name__})")
+        if USING_INTELLIGENT_SEG:
+            print("✅ Usando intelligent_segmentation (optimizado)")
+        else:
+            print("⚠️  Usando segmentación básica")
     
     def predict(self, image_path, debug=False, visualize=False):
-        """Predicción con debug mejorado"""
+        """
+        Predicción usando INTELLIGENT_SEGMENTATION del proyecto original
+        """
         print(f"\n{'='*70}")
         print(f"🔍 PROCESANDO: {Path(image_path).name}")
         print('='*70)
@@ -45,76 +53,24 @@ class UniversalPredictor:
         if not Path(image_path).exists():
             raise ValueError(f"❌ No existe: {image_path}")
         
-        # Cargar imagen
-        original = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
-        if original is None:
-            raise ValueError(f"❌ No se pudo cargar: {image_path}")
+        # USAR INTELLIGENT_SEGMENTATION si está disponible
+        if USING_INTELLIGENT_SEG:
+            print("\n🔧 Usando intelligent_segmentation...")
+            char_boxes, original = intelligent_segmentation(str(image_path), debug=debug)
+        else:
+            # Fallback: segmentación básica
+            print("\n⚠️  Usando segmentación básica (menos precisa)")
+            original = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+            if original is None:
+                raise ValueError(f"❌ No se pudo cargar: {image_path}")
+            
+            char_boxes = self._basic_segmentation(original, debug)
         
         h, w = original.shape
         print(f"📐 Dimensiones: {w}x{h}")
         
-        # Detectar tipo
-        variance = np.var(original)
-        is_handwritten = variance > 800
-        print(f"📝 Tipo: {'✍️  Manuscrita' if is_handwritten else '🖨️  Digital'} (var={variance:.0f})")
-        
-        # Preprocesamiento adaptativo
-        print("\n⚙️  PREPROCESAMIENTO:")
-        if is_handwritten:
-            print("   → CLAHE + Gaussian + Adaptative Threshold")
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            enhanced = clahe.apply(original)
-            blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
-            binary = cv2.adaptiveThreshold(
-                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                cv2.THRESH_BINARY_INV, 15, 8
-            )
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
-            binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-        else:
-            print("   → Otsu Threshold")
-            _, binary = cv2.threshold(
-                original, 0, 255,
-                cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-            )
-        
-        print(f"   ✓ Imagen binaria: {binary.shape}, únicos: {np.unique(binary)}")
-        
-        # Segmentación
-        print("\n🔍 SEGMENTACIÓN:")
-        contours, _ = cv2.findContours(
-            binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        print(f"   Contornos encontrados: {len(contours)}")
-        
-        # Filtrado
-        char_boxes = []
-        for i, contour in enumerate(contours):
-            x, y, cw, ch = cv2.boundingRect(contour)
-            area = cw * ch
-            aspect_ratio = cw / ch if ch > 0 else 0
-            
-            if is_handwritten:
-                min_area, min_dim = 20, 5
-                max_w, max_h = w * 0.6, h * 0.9
-                aspect_range = (0.05, 6.0)
-            else:
-                min_area, min_dim = 50, 8
-                max_w, max_h = w * 0.3, h * 0.8
-                aspect_range = (0.1, 3.0)
-            
-            valid = (area >= min_area and
-                    cw >= min_dim and ch >= min_dim and
-                    cw <= max_w and ch <= max_h and
-                    aspect_range[0] <= aspect_ratio <= aspect_range[1])
-            
-            if valid:
-                char_boxes.append((x, y, cw, ch))
-                if debug and i < 3:
-                    print(f"   ✓ Contorno {i}: x={x}, y={y}, w={cw}, h={ch}, area={area}, ar={aspect_ratio:.2f}")
-        
         num_chars = len(char_boxes)
-        print(f"   Caracteres válidos: {num_chars}")
+        print(f"🔍 Caracteres detectados: {num_chars}")
         
         if not char_boxes:
             return "", {'text': '', 'type': 'VACÍO', 'num_chars': 0}
@@ -153,7 +109,7 @@ class UniversalPredictor:
                 print(f"\n   [{i+1}] Región: ({x_start}, {y_start}) → ({x_end}, {y_end})")
                 print(f"       Tamaño extraído: {char_img.shape}")
             
-            # Preprocesar
+            # Preprocesar (usa advanced_char_preprocessing automáticamente)
             char_processed = preprocess_char_unified(char_img, debug=(debug and i < 3))
             char_input = char_processed.reshape(1, 32, 32, 1)
             
@@ -161,9 +117,6 @@ class UniversalPredictor:
             prediction = self.model.predict(char_input, verbose=0)
             predicted_class = np.argmax(prediction)
             confidence = np.max(prediction)
-            
-            # 🔍 TOP 3 predicciones
-            top3_indices = np.argsort(prediction[0])[-3:][::-1]
             
             # Preprocesamiento alternativo si confianza baja
             if confidence < 0.3:
@@ -181,9 +134,8 @@ class UniversalPredictor:
                     prediction = prediction_alt
                     predicted_class = np.argmax(prediction)
                     confidence = confidence_alt
-                    top3_indices = np.argsort(prediction[0])[-3:][::-1]
                     if debug and i < 3:
-                        print(f"       🔄 Preprocesamiento alternativo aplicado")
+                        print(f"       🔄 Preprocesamiento alternativo")
             
             # Decodificar
             predicted_char = LABEL_MAP.get(predicted_class, '?')
@@ -195,6 +147,7 @@ class UniversalPredictor:
             print(f"   {color} [{i+1:2d}] '{predicted_char}' ({confidence:.1%}) | clase={predicted_class}")
             
             if debug and i < 3:
+                top3_indices = np.argsort(prediction[0])[-3:][::-1]
                 print(f"       Top 3: ", end="")
                 for idx in top3_indices:
                     char = LABEL_MAP.get(idx, '?')
@@ -231,6 +184,55 @@ class UniversalPredictor:
             return phrase, info, fig
         
         return phrase, info
+    
+    def _basic_segmentation(self, original, debug):
+        """Segmentación básica (fallback)"""
+        variance = np.var(original)
+        is_handwritten = variance > 800
+        
+        if is_handwritten:
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(original)
+            blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
+            binary = cv2.adaptiveThreshold(
+                blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY_INV, 15, 8
+            )
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+            binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+        else:
+            _, binary = cv2.threshold(
+                original, 0, 255,
+                cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+            )
+        
+        contours, _ = cv2.findContours(
+            binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        
+        h, w = original.shape
+        char_boxes = []
+        for contour in contours:
+            x, y, cw, ch = cv2.boundingRect(contour)
+            area = cw * ch
+            aspect_ratio = cw / ch if ch > 0 else 0
+            
+            if is_handwritten:
+                min_area, min_dim = 20, 5
+                max_w, max_h = w * 0.6, h * 0.9
+                aspect_range = (0.05, 6.0)
+            else:
+                min_area, min_dim = 50, 8
+                max_w, max_h = w * 0.3, h * 0.8
+                aspect_range = (0.1, 3.0)
+            
+            if (area >= min_area and
+                cw >= min_dim and ch >= min_dim and
+                cw <= max_w and ch <= max_h and
+                aspect_range[0] <= aspect_ratio <= aspect_range[1]):
+                char_boxes.append((x, y, cw, ch))
+        
+        return char_boxes
     
     def _smart_sort(self, boxes, content_type):
         """Ordenamiento inteligente"""
@@ -300,42 +302,34 @@ class UniversalPredictor:
         return ' '.join(phrase.split())
     
     def _create_modern_visualization(self, image, boxes, chars, confs, text, content_type):
-        """🎨 VISUALIZACIÓN MODERNA Y DIFERENTE"""
+        """Visualización moderna"""
         if len(image.shape) == 2:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
         else:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-        # Fondo oscuro
         fig = plt.figure(figsize=(18, 10), facecolor='#1e1e1e')
         ax = plt.subplot(111, facecolor='#2d2d30')
         
         ax.imshow(image_rgb, cmap='gray')
         
-        # Paleta de colores moderna
         colors = {
-            'high': '#00ff88',    # Verde neón
-            'medium': '#ffd700',  # Dorado
-            'low': '#ff6b35',     # Naranja
-            'verylow': '#ff0055'  # Rosa
+            'high': '#00ff88',
+            'medium': '#ffd700',
+            'low': '#ff6b35',
+            'verylow': '#ff0055'
         }
         
         for i, ((x, y, w, h), char, conf) in enumerate(zip(boxes, chars, confs)):
-            # Color según confianza
             if conf > 0.8:
                 color = colors['high']
-                style = 'round,pad=0.3'
             elif conf > 0.5:
                 color = colors['medium']
-                style = 'round,pad=0.3'
             elif conf > 0.2:
                 color = colors['low']
-                style = 'round,pad=0.3'
             else:
                 color = colors['verylow']
-                style = 'round,pad=0.3'
             
-            # Rectángulo con esquinas redondeadas
             fancy_box = FancyBboxPatch(
                 (x, y), w, h,
                 boxstyle="round,pad=2",
@@ -346,7 +340,6 @@ class UniversalPredictor:
             )
             ax.add_patch(fancy_box)
             
-            # Etiqueta con diseño moderno
             label_text = f"#{i+1}\n'{char}'\n{conf:.0%}"
             
             ax.text(
@@ -367,7 +360,6 @@ class UniversalPredictor:
                 zorder=100
             )
         
-        # Título moderno
         emojis = {"LETRA": "🔤", "PALABRA": "📝", "FRASE": "📄"}
         title = f"{emojis[content_type]} RECONOCIMIENTO OCR | Tipo: {content_type}\nTexto: {text}"
         
@@ -398,7 +390,7 @@ class UniversalPredictor:
 
 
 def predict_cli(image_path, visualize=False):
-    """CLI con debug completo"""
+    """CLI"""
     predictor = UniversalPredictor()
     
     if visualize:

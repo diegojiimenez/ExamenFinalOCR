@@ -6,12 +6,21 @@ import cv2
 import numpy as np
 from pathlib import Path
 
+# Intentar importar preprocesamiento avanzado
+try:
+    from utils.enhanced_preprocessing import advanced_char_preprocessing
+    USING_ADVANCED = True
+    print("✅ Usando enhanced_preprocessing")
+except ImportError:
+    USING_ADVANCED = False
+    print("⚠️  enhanced_preprocessing no disponible, usando versión básica")
+
 
 # ============================================================================
 # LABEL_MAP EXACTO DEL PROYECTO ORIGINAL
 # ============================================================================
 LABEL_MAP = {
-    # Números 0-9 (labels 0-9) ← ESTO ES CRÍTICO
+    # Números 0-9 (labels 0-9)
     0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 
     5: '5', 6: '6', 7: '7', 8: '8', 9: '9',
     
@@ -31,36 +40,36 @@ REVERSE_LABEL_MAP = {v: k for k, v in LABEL_MAP.items()}
 
 def preprocess_char_unified(char_img, debug=False):
     """
-    Preprocesamiento IDÉNTICO al proyecto original
+    Preprocesamiento UNIFICADO - usa advanced si está disponible
     """
-    if debug:
-        print(f"    📏 Entrada: {char_img.shape}, rango: [{char_img.min()}, {char_img.max()}]")
-    
-    if char_img.size == 0:
-        return np.zeros((32, 32), dtype=np.float32)
-    
-    # 1. Redimensionar a 32x32
-    char_resized = cv2.resize(char_img, (32, 32), interpolation=cv2.INTER_AREA)
-    
-    # 2. Invertir si es necesario
-    mean_val = np.mean(char_resized)
-    if mean_val > 127:
-        char_resized = 255 - char_resized
+    if USING_ADVANCED:
+        return advanced_char_preprocessing(char_img, target_size=(32, 32), debug=debug)
+    else:
+        # Fallback básico
         if debug:
-            print(f"    🔄 Invertido (mean: {mean_val:.1f})")
-    
-    # 3. Normalizar [0, 1]
-    char_normalized = char_resized.astype('float32') / 255.0
-    
-    # 4. Binarización suave
-    threshold = 0.15
-    char_binary = np.where(char_normalized > threshold, 1.0, 0.0)
-    
-    if debug:
-        white_pct = (np.sum(char_binary == 1.0) / char_binary.size) * 100
-        print(f"    📊 Blancos: {white_pct:.1f}%")
-    
-    return char_binary.astype('float32')
+            print(f"    📏 Entrada (básico): {char_img.shape}, rango: [{char_img.min()}, {char_img.max()}]")
+        
+        if char_img.size == 0:
+            return np.zeros((32, 32), dtype=np.float32)
+        
+        char_resized = cv2.resize(char_img, (32, 32), interpolation=cv2.INTER_AREA)
+        
+        mean_val = np.mean(char_resized)
+        if mean_val > 127:
+            char_resized = 255 - char_resized
+            if debug:
+                print(f"    🔄 Invertido (mean: {mean_val:.1f})")
+        
+        char_normalized = char_resized.astype('float32') / 255.0
+        
+        threshold = 0.15
+        char_binary = np.where(char_normalized > threshold, 1.0, 0.0)
+        
+        if debug:
+            white_pct = (np.sum(char_binary == 1.0) / char_binary.size) * 100
+            print(f"    📊 Blancos: {white_pct:.1f}%")
+        
+        return char_binary.astype('float32')
 
 
 def get_char_from_index(index):
@@ -82,6 +91,12 @@ def print_label_map():
     print("   " + " ".join([LABEL_MAP[i] for i in range(10, 36)]))
     print("\n🔡 MINÚSCULAS (36-61):")
     print("   " + " ".join([LABEL_MAP[i] for i in range(36, 62)]))
+    
+    if USING_ADVANCED:
+        print("\n✅ Preprocesamiento: ADVANCED (robusto)")
+    else:
+        print("\n⚠️  Preprocesamiento: BÁSICO (menos preciso)")
+    
     print("="*60 + "\n")
 
 
@@ -93,10 +108,11 @@ if __name__ == "__main__":
     test_cases = [
         (0, '0'), (9, '9'),           # Números
         (10, 'A'), (35, 'Z'),         # Mayúsculas
-        (36, 'a'), (61, 'z')          # Minúsculas
+        (36, 'a'), (61, 'z'),         # Minúsculas
+        (18, 'I'), (44, 'i')          # Casos problemáticos I/i
     ]
     
     for idx, expected in test_cases:
         actual = LABEL_MAP.get(idx, '?')
         status = '✅' if actual == expected else '❌'
-        print(f"   {status} índice {idx} → '{actual}' (esperado: '{expected}')")
+        print(f"   {status} índice {idx:2d} → '{actual}' (esperado: '{expected}')")
