@@ -1,3 +1,0 @@
-"""
-recognition package
-"""

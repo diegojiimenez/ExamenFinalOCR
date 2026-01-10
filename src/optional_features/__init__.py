@@ -1,3 +1,0 @@
-"""
-optional_features package
-"""
