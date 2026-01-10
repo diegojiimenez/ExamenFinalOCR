@@ -17,7 +17,7 @@ class ModernOCRApp:
     def __init__(self, root):
         self.root = root
         self.root.title("🔤 OCR Inteligente - Sistema de Reconocimiento Universal")
-        self.root.geometry("700x550")
+        self.root.geometry("700x600")  # 🔄 Altura aumentada
         self.root.resizable(False, False)
         self.root.configure(bg='#1e1e1e')
         
@@ -26,8 +26,8 @@ class ModernOCRApp:
             self.predictor = UniversalPredictor()
             self.model_ready = True
         except FileNotFoundError as e:
-            messagebox.showerror("Error", str(e))
             self.model_ready = False
+            self.predictor = None
         
         self.current_image_path = None
         self.setup_ui()
@@ -104,7 +104,7 @@ class ModernOCRApp:
             height=2,
             relief=tk.FLAT,
             cursor='hand2',
-            state=tk.DISABLED
+            state=tk.DISABLED if not self.model_ready else tk.NORMAL
         )
         self.btn_recognize.grid(row=0, column=1, padx=10)
         
@@ -131,6 +131,24 @@ class ModernOCRApp:
         )
         self.result_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
+        # 🆕 BOTÓN DE ENTRENAMIENTO
+        separator = tk.Frame(content_frame, height=1, bg="#3d3d3d")
+        separator.pack(fill=tk.X, pady=10)
+        
+        self.btn_train = tk.Button(
+            content_frame,
+            text="🔄 Re-entrenar Modelo",
+            command=self.train_model,
+            bg='#e67e22',
+            fg='white',
+            font=("Segoe UI", 10),
+            width=25,
+            height=1,
+            relief=tk.FLAT,
+            cursor='hand2'
+        )
+        self.btn_train.pack(pady=5)
+        
         # === FOOTER ===
         footer = tk.Label(
             self.root,
@@ -142,17 +160,17 @@ class ModernOCRApp:
         footer.pack(side=tk.BOTTOM, pady=10)
         
         # Estado del modelo
-        status_text = "✅ Modelo cargado" if self.model_ready else "❌ Modelo no encontrado"
-        status_color = "#16825d" if self.model_ready else "#e74856"
+        status_text = "✅ Modelo cargado" if self.model_ready else "⚠️ Modelo no encontrado - Ejecuta entrenamiento"
+        status_color = "#16825d" if self.model_ready else "#e67e22"
         
-        status = tk.Label(
+        self.status_label = tk.Label(
             self.root,
             text=status_text,
             font=("Segoe UI", 9),
             fg=status_color,
             bg='#1e1e1e'
         )
-        status.pack(side=tk.BOTTOM)
+        self.status_label.pack(side=tk.BOTTOM)
     
     def select_image(self):
         """Selecciona una imagen para procesar"""
@@ -167,7 +185,8 @@ class ModernOCRApp:
         if filepath:
             self.current_image_path = filepath
             self.display_image(filepath)
-            self.btn_recognize.config(state=tk.NORMAL)
+            if self.model_ready:
+                self.btn_recognize.config(state=tk.NORMAL)
             self.result_text.delete(1.0, tk.END)
     
     def display_image(self, filepath):
@@ -184,7 +203,8 @@ class ModernOCRApp:
     
     def recognize_text(self):
         """Ejecuta el reconocimiento OCR"""
-        if not self.current_image_path:
+        if not self.current_image_path or not self.model_ready:
+            messagebox.showwarning("Advertencia", "Primero debes entrenar el modelo")
             return
         
         self.result_text.delete(1.0, tk.END)
@@ -200,7 +220,7 @@ class ModernOCRApp:
             self.result_text.insert(1.0, f"'{text}'")
             
             # Información adicional
-            content_emojis = {"LETRA": "🔤", "PALABRA": "📝", "FRASE": "📄"}
+            content_emojis = {"LETRA": "🔤", "PALABRA": "📝", "FRASE": "📄", "VACÍO": "❌"}
             emoji = content_emojis.get(info['type'], "📋")
             
             messagebox.showinfo(
@@ -214,6 +234,72 @@ class ModernOCRApp:
             self.result_text.delete(1.0, tk.END)
             self.result_text.insert(1.0, "❌ Error en el reconocimiento")
             messagebox.showerror("Error", f"Error durante el reconocimiento:\n{str(e)}")
+    
+    def train_model(self):
+        """🆕 Entrena el modelo desde la GUI"""
+        response = messagebox.askyesno(
+            "Entrenar Modelo",
+            "¿Deseas entrenar el modelo?\n\n"
+            "Esto puede tardar varios minutos.\n"
+            "Se sobrescribirá el modelo actual si existe."
+        )
+        
+        if not response:
+            return
+        
+        try:
+            from core.model_training import train_model
+            
+            # Mostrar ventana de progreso
+            progress_window = tk.Toplevel(self.root)
+            progress_window.title("Entrenamiento en Progreso")
+            progress_window.geometry("400x150")
+            progress_window.configure(bg='#1e1e1e')
+            progress_window.resizable(False, False)
+            
+            tk.Label(
+                progress_window,
+                text="🔄 Entrenando modelo...",
+                font=("Segoe UI", 14, "bold"),
+                fg="#00d9ff",
+                bg='#1e1e1e'
+            ).pack(pady=20)
+            
+            tk.Label(
+                progress_window,
+                text="Por favor espera, esto puede tomar varios minutos.",
+                font=("Segoe UI", 10),
+                fg="#cccccc",
+                bg='#1e1e1e'
+            ).pack(pady=10)
+            
+            progress_window.update()
+            
+            # Entrenar modelo
+            train_model()
+            
+            progress_window.destroy()
+            
+            # Actualizar estado
+            try:
+                self.predictor = UniversalPredictor()
+                self.model_ready = True
+                self.btn_recognize.config(state=tk.NORMAL)
+                self.status_label.config(
+                    text="✅ Modelo entrenado exitosamente",
+                    fg="#16825d"
+                )
+            except:
+                pass
+            
+            messagebox.showinfo(
+                "Entrenamiento Completo",
+                "✅ El modelo se ha entrenado exitosamente.\n\n"
+                "Ya puedes usar el reconocimiento de texto."
+            )
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error durante el entrenamiento:\n{str(e)}")
 
 
 def launch_gui():

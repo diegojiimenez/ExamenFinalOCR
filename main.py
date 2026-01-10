@@ -20,7 +20,13 @@ def main():
         
         command = sys.argv[1]
         
-        if command == "predict" and len(sys.argv) >= 3:
+        if command == "train":
+            # 🆕 NUEVO: Entrenar modelo
+            from core.model_training import train_model
+            print("🚀 Iniciando entrenamiento del modelo...")
+            train_model()
+            
+        elif command == "predict" and len(sys.argv) >= 3:
             image_path = sys.argv[2]
             predict_cli(image_path)
             
@@ -68,6 +74,7 @@ def main():
         else:
             print("Uso del Sistema OCR:")
             print("=" * 60)
+            print("  python main.py train                - 🆕 Entrenar modelo")
             print("  python main.py predict <imagen>     - Predecir una imagen")
             print("  python main.py test                 - Probar imágenes de prueba")
             print("  python main.py referencia [cat]     - Probar imágenes de referencia")

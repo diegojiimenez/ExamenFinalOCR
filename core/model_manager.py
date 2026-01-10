@@ -11,7 +11,7 @@ class ModelManager:
     Maneja la carga y verificación del modelo
     """
     
-    def __init__(self, model_path="models/best_model.h5"):
+    def __init__(self, model_path="models/trained_model.h5"):  # 🔄 CAMBIADO
         self.model_path = model_path
         self.model = None
     
@@ -20,7 +20,8 @@ class ModelManager:
         if not os.path.exists(self.model_path):
             raise FileNotFoundError(
                 f"❌ Modelo no encontrado en: {self.model_path}\n"
-                f"   Asegúrate de tener 'best_model.h5' en la carpeta 'models/'"
+                f"   Asegúrate de tener 'trained_model.h5' en la carpeta 'models/'\n"
+                f"   Ejecuta: python main.py train"
             )
         
         print(f"📦 Cargando modelo desde: {self.model_path}")
