@@ -1,5 +1,5 @@
 """
-Predictor IDÉNTICO al proyecto original
+Predictor con POST-CORRECCIÓN GEOMÉTRICA
 """
 
 import cv2
@@ -13,8 +13,8 @@ from pathlib import Path
 from core.model_manager import ModelManager
 from utils.config import config
 from utils.dataset import LABEL_MAP, preprocess_char_unified
+from utils.post_correction import post_corrector
 
-# Importar segmentación inteligente si está disponible
 try:
     from utils.enhanced_preprocessing import intelligent_segmentation
     USING_INTELLIGENT_SEG = True
@@ -23,7 +23,7 @@ except ImportError:
 
 
 class UniversalPredictor:
-    """Predictor con lógica EXACTA del proyecto original"""
+    """Predictor con post-corrección geométrica"""
     
     def __init__(self, model_path=None):
         if model_path is None:
@@ -36,16 +36,15 @@ class UniversalPredictor:
         self.num_classes = 62
         
         print(f"📊 Modelo: {self.input_size}x{self.input_size}, {self.num_classes} clases")
+        print("✅ Post-corrección geométrica activada")
         
         if USING_INTELLIGENT_SEG:
-            print("✅ Usando intelligent_segmentation (optimizado)")
+            print("✅ Usando intelligent_segmentation")
         else:
             print("⚠️  Usando segmentación básica")
     
     def predict(self, image_path, debug=False, visualize=False):
-        """
-        Predicción usando INTELLIGENT_SEGMENTATION del proyecto original
-        """
+        """Predicción con POST-CORRECCIÓN GEOMÉTRICA"""
         print(f"\n{'='*70}")
         print(f"🔍 PROCESANDO: {Path(image_path).name}")
         print('='*70)
@@ -53,17 +52,15 @@ class UniversalPredictor:
         if not Path(image_path).exists():
             raise ValueError(f"❌ No existe: {image_path}")
         
-        # USAR INTELLIGENT_SEGMENTATION si está disponible
+        # Segmentación
         if USING_INTELLIGENT_SEG:
             print("\n🔧 Usando intelligent_segmentation...")
             char_boxes, original = intelligent_segmentation(str(image_path), debug=debug)
         else:
-            # Fallback: segmentación básica
-            print("\n⚠️  Usando segmentación básica (menos precisa)")
+            print("\n⚠️  Usando segmentación básica")
             original = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
             if original is None:
                 raise ValueError(f"❌ No se pudo cargar: {image_path}")
-            
             char_boxes = self._basic_segmentation(original, debug)
         
         h, w = original.shape
@@ -94,9 +91,9 @@ class UniversalPredictor:
         
         recognized_chars = []
         confidences = []
+        char_images = []  # 🆕 Guardar imágenes para post-corrección
         
         for i, (x, y, cw, ch) in enumerate(char_boxes):
-            # Extraer con margen
             margin = max(2, min(cw, ch) // 8)
             y_start = max(0, y - margin)
             y_end = min(h, y + ch + margin)
@@ -104,16 +101,15 @@ class UniversalPredictor:
             x_end = min(w, x + cw + margin)
             
             char_img = original[y_start:y_end, x_start:x_end]
+            char_images.append(char_img)  # 🆕 Guardar imagen
             
             if debug and i < 3:
                 print(f"\n   [{i+1}] Región: ({x_start}, {y_start}) → ({x_end}, {y_end})")
-                print(f"       Tamaño extraído: {char_img.shape}")
+                print(f"       Tamaño: {char_img.shape}")
             
-            # Preprocesar (usa advanced_char_preprocessing automáticamente)
             char_processed = preprocess_char_unified(char_img, debug=(debug and i < 3))
             char_input = char_processed.reshape(1, 32, 32, 1)
             
-            # Predecir
             prediction = self.model.predict(char_input, verbose=0)
             predicted_class = np.argmax(prediction)
             confidence = np.max(prediction)
@@ -134,41 +130,42 @@ class UniversalPredictor:
                     prediction = prediction_alt
                     predicted_class = np.argmax(prediction)
                     confidence = confidence_alt
-                    if debug and i < 3:
-                        print(f"       🔄 Preprocesamiento alternativo")
             
-            # Decodificar
             predicted_char = LABEL_MAP.get(predicted_class, '?')
             recognized_chars.append(predicted_char)
             confidences.append(confidence)
             
-            # Mostrar resultado
             color = '🟢' if confidence > 0.8 else ('🟡' if confidence > 0.5 else '🔴')
             print(f"   {color} [{i+1:2d}] '{predicted_char}' ({confidence:.1%}) | clase={predicted_class}")
-            
-            if debug and i < 3:
-                top3_indices = np.argsort(prediction[0])[-3:][::-1]
-                print(f"       Top 3: ", end="")
-                for idx in top3_indices:
-                    char = LABEL_MAP.get(idx, '?')
-                    conf = prediction[0][idx]
-                    print(f"'{char}':{conf:.1%} ", end="")
-                print()
         
-        # Construir texto
+        # Construir texto ORIGINAL
         if content_type == "LETRA":
-            phrase = "".join(recognized_chars)
+            phrase_original = "".join(recognized_chars)
         elif content_type == "PALABRA":
-            phrase = "".join(recognized_chars)
+            phrase_original = "".join(recognized_chars)
         else:
-            phrase = self._build_phrase_with_spaces(recognized_chars, char_boxes)
+            phrase_original = self._build_phrase_with_spaces(recognized_chars, char_boxes)
         
         print("-" * 70)
-        print(f"📝 RESULTADO FINAL: '{phrase}'")
+        print(f"📝 PREDICCIÓN ORIGINAL: '{phrase_original}'")
+        
+        # 🆕 POST-CORRECCIÓN GEOMÉTRICA (con imágenes)
+        phrase_corrected = post_corrector.correct_text(
+            phrase_original, 
+            recognized_chars, 
+            confidences,
+            char_images=char_images,  # 🆕 Pasar imágenes
+            debug=debug
+        )
+        
+        if phrase_corrected != phrase_original:
+            print(f"✨ TEXTO CORREGIDO: '{phrase_corrected}'")
+        
         print('='*70)
         
         info = {
-            'text': phrase,
+            'text': phrase_corrected,
+            'text_original': phrase_original,
             'type': content_type,
             'num_chars': num_chars,
             'boxes': char_boxes,
@@ -179,11 +176,11 @@ class UniversalPredictor:
         if visualize:
             fig = self._create_modern_visualization(
                 original, char_boxes, recognized_chars,
-                confidences, phrase, content_type
+                confidences, phrase_corrected, content_type
             )
-            return phrase, info, fig
+            return phrase_corrected, info, fig
         
-        return phrase, info
+        return phrase_corrected, info
     
     def _basic_segmentation(self, original, debug):
         """Segmentación básica (fallback)"""
