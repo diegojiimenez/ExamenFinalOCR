@@ -1,5 +1,5 @@
 """
-Sistema OCR - Compatible con proyecto Examen Final
+Sistema OCR - Proyecto Examen Final
 """
 
 import sys
