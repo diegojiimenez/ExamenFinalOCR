@@ -249,7 +249,7 @@ class UniversalPredictor:
         )
         
         ax.set_title(
-            "📋 RECONOCIMIENTO OCR | Tipo: VACÍO\nTexto: (sin caracteres)",
+            "📋 RECONOCIMIENTO OCR | Texto: (sin caracteres)",
             fontsize=18,
             fontweight='bold',
             color='#ff6b35',
@@ -446,7 +446,7 @@ class UniversalPredictor:
                 zorder=100
             )
         
-        title = f"📋 RECONOCIMIENTO OCR | Tipo: {content_type}\nTexto: {text}"
+        title = f"📋 RECONOCIMIENTO OCR | Texto: {text}"
         
         ax.set_title(
             title,
