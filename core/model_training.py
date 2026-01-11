@@ -1,6 +1,5 @@
 """
 Entrenamiento del modelo OCR con arquitectura CNN mejorada
-ARQUITECTURA AJUSTADA AL MODELO PRE-ENTRENADO (32x32, 62 clases)
 """
 
 import os
@@ -145,7 +144,7 @@ class OCRModelTrainer:
     
     def build_model(self):
         """
-        Construye la arquitectura CNN EXACTA del modelo pre-entrenado
+        Construye la arquitectura CNN 
         """
         print("🏗️  Construyendo arquitectura del modelo...")
         

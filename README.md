@@ -931,7 +931,6 @@ FileNotFoundError: models/trained_model.h5 not found
 python main.py train
 
 # Opción B: Descargar modelo pre-entrenado
-# [Incluir link si está disponible]
 ```
 
 #### 2. Error: "Out of Memory" durante entrenamiento
