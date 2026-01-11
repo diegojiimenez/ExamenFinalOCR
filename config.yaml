@@ -2,7 +2,7 @@
 
 model:
   path: "models/trained_model.h5"
-  input_shape: [32, 32, 1]  # 🔄 CAMBIADO: 28x28 → 32x32
+  input_shape: [32, 32, 1]  
   char_map: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"  # 62 caracteres
 
 preprocessing:
