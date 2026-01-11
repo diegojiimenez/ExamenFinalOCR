@@ -1,5 +1,6 @@
 """
-Post-corrección basada en ANÁLISIS GEOMÉTRICO (sin diccionario)
+Post-corrección basada en ANÁLISIS GEOMÉTRICO PURO
+Enfocada en el problema general de 'I'/'i', no en palabras específicas
 """
 
 import cv2
@@ -8,8 +9,7 @@ import numpy as np
 
 class OCRPostCorrector:
     """
-    Corrige errores usando ANÁLISIS GEOMÉTRICO de los caracteres.
-    No usa diccionario, solo geometría y contexto.
+    Corrige 'I'/'i' usando SOLO geometría, sin depender del contexto.
     """
     
     def __init__(self):
@@ -17,17 +17,7 @@ class OCRPostCorrector:
     
     def correct_text(self, text, char_list, confidences, char_images=None, debug=False):
         """
-        Corrige texto usando análisis geométrico
-        
-        Args:
-            text: Texto predicho
-            char_list: Lista de caracteres
-            confidences: Confianzas
-            char_images: Lista de imágenes de cada carácter (opcional pero recomendado)
-            debug: Debug
-        
-        Returns:
-            Texto corregido
+        Corrige caracteres confundibles analizando SOLO su geometría
         """
         if not char_list or not confidences:
             return text
@@ -39,33 +29,76 @@ class OCRPostCorrector:
         corrected_chars = char_list.copy()
         corrections_made = []
         
-        # Analizar cada carácter con baja confianza
+        # Determinar el "modo" de la frase (mayúsculas vs minúsculas)
+        uppercase_count = sum(1 for c in char_list if c.isupper())
+        lowercase_count = sum(1 for c in char_list if c.islower())
+        total_letters = uppercase_count + lowercase_count
+        
+        # 🔧 FIX: Si no hay letras, no aplicar corrección de modo
+        if total_letters == 0:
+            if debug:
+                print(f"   Modo: SIN LETRAS (solo números/símbolos) - No aplicar corrección")
+            return text  # ✅ No corregir si solo hay números
+        
+        # Si predominan mayúsculas → modo mayúscula, si predominan minúsculas → modo minúscula
+        is_uppercase_mode = uppercase_count > lowercase_count
+        
+        if debug:
+            print(f"   Modo detectado: {'MAYÚSCULAS' if is_uppercase_mode else 'minúsculas'}")
+            print(f"   (May: {uppercase_count}, Min: {lowercase_count})")
+        
+        # Analizar cada carácter
         for i, (char, conf) in enumerate(zip(char_list, confidences)):
             
-            # Solo procesar caracteres ambiguos con confianza < 60%
-            if conf >= 0.6:
-                continue
+            # 🔧 FIX CRÍTICO: Solo analizar caracteres con BAJA confianza O específicos problemáticos
             
-            # Analizar según el carácter
-            if char in ['P', 'p']:  # Confusión común con 'I'/'i'
-                corrected = self._analyze_p_vs_i(char, i, char_list, char_images, debug)
+            if char in ['P', 'p']:
+                # Solo analizar 'P'/'p' si confianza < 50% (muy baja)
+                if conf < 0.50:
+                    corrected = self._analyze_thin_character(
+                        char, i, char_list, char_images, 
+                        confidences[i], is_uppercase_mode, debug
+                    )
+                    if corrected != char:
+                        corrected_chars[i] = corrected
+                        corrections_made.append(f"{i}: '{char}'→'{corrected}' ({conf:.1%})")
+            
+            elif char == 'f':
+                # 'f' es muy problemática, analizar hasta 85% de confianza
+                if conf < 0.85:
+                    corrected = self._analyze_thin_character(
+                        char, i, char_list, char_images, 
+                        confidences[i], is_uppercase_mode, debug
+                    )
+                    if corrected != char:
+                        corrected_chars[i] = corrected
+                        corrections_made.append(f"{i}: '{char}'→'{corrected}' ({conf:.1%})")
+            
+            elif char in ['l', '1', '|']:
+                # 🔧 FIX: Umbral MUY BAJO para '1' - solo si confianza < 40%
+                # Si '1' tiene >40% confianza, probablemente ES un número
+                if conf < 0.40:  # ✅ Bajado de 0.70 a 0.40
+                    # Verificar si realmente debería ser letra
+                    if self._should_be_letter(char, i, char_list, debug):
+                        corrected = self._analyze_thin_character(
+                            char, i, char_list, char_images, 
+                            confidences[i], is_uppercase_mode, debug
+                        )
+                        if corrected != char:
+                            corrected_chars[i] = corrected
+                            corrections_made.append(f"{i}: '{char}'→'{corrected}' ({conf:.1%})")
+            
+            # Validar 'I'/'i' ya reconocidas
+            elif char in ['I', 'i'] and conf < 0.85:
+                corrected = self._validate_i_character(
+                    char, i, char_list, is_uppercase_mode, debug
+                )
                 if corrected != char:
                     corrected_chars[i] = corrected
                     corrections_made.append(f"{i}: '{char}'→'{corrected}' ({conf:.1%})")
             
-            elif char in ['l', '1', '|']:  # Confusión con 'I'
-                corrected = self._analyze_thin_chars(char, i, char_list, char_images, debug)
-                if corrected != char:
-                    corrected_chars[i] = corrected
-                    corrections_made.append(f"{i}: '{char}'→'{corrected}' ({conf:.1%})")
-            
-            elif char in ['I', 'i']:  # Validar si realmente es 'I'
-                corrected = self._validate_i(char, i, char_list, char_images, debug)
-                if corrected != char:
-                    corrected_chars[i] = corrected
-                    corrections_made.append(f"{i}: '{char}'→'{corrected}' ({conf:.1%})")
-            
-            elif char in ['O', '0', 'o']:  # Confusión O/0
+            # Analizar O/0
+            elif char in ['O', '0', 'o'] and conf < 0.70:
                 corrected = self._analyze_o_vs_zero(char, i, char_list, debug)
                 if corrected != char:
                     corrected_chars[i] = corrected
@@ -78,103 +111,128 @@ class OCRPostCorrector:
             for corr in corrections_made:
                 print(f"      - {corr}")
             print(f"   Resultado: '{corrected_text}'")
+        elif debug:
+            print(f"   Sin correcciones")
         
         return corrected_text
     
-    def _analyze_p_vs_i(self, char, index, char_list, char_images, debug):
+    def _should_be_letter(self, char, index, char_list, debug):
         """
-        Distingue entre 'P' y 'I' usando geometría
+        🆕 Verifica si un carácter '1'/'l'/'|' debería ser letra o número
         
-        Características clave:
-        - 'P': Tiene bucle cerrado en la parte superior
-        - 'I': Es delgada y sin bucles
+        Reglas:
+        - Si está rodeado de LETRAS → probablemente sea letra ('I' o 'i')
+        - Si está rodeado de NÚMEROS → probablemente sea número ('1')
+        - Si está solo → no cambiar
         """
         context = self._get_context(char_list, index)
         
-        # Regla 1: Contexto alfabético
-        # Si está entre letras mayúsculas Y tiene confianza baja, podría ser 'I'
-        prev_is_upper = context['prev'] and context['prev'].isupper()
-        next_is_upper = context['next'] and context['next'].isupper()
+        # Contar caracteres alfanuméricos vecinos
+        prev_is_letter = context['prev'] and context['prev'].isalpha()
+        next_is_letter = context['next'] and context['next'].isalpha()
         
-        if prev_is_upper and next_is_upper:
+        prev_is_digit = context['prev'] and context['prev'].isdigit()
+        next_is_digit = context['next'] and context['next'].isdigit()
+        
+        # Si está entre LETRAS → debería ser letra
+        if prev_is_letter or next_is_letter:
             if debug:
-                print(f"      [{index}] '{char}' entre mayúsculas → probablemente 'I'")
-            return 'I'
+                print(f"         → Cerca de letras, podría ser 'I'/'i'")
+            return True
         
-        # Regla 2: Si está entre minúsculas, podría ser 'i'
-        prev_is_lower = context['prev'] and context['prev'].islower()
-        next_is_lower = context['next'] and context['next'].islower()
-        
-        if prev_is_lower and next_is_lower and char == 'p':
+        # Si está entre NÚMEROS → es número
+        if prev_is_digit or next_is_digit:
             if debug:
-                print(f"      [{index}] 'p' entre minúsculas → probablemente 'i'")
-            return 'i'
+                print(f"         → Cerca de números, es '1'")
+            return False
         
-        # Regla 3: Análisis geométrico (si tenemos imagen)
+        # Si está solo o sin contexto claro → NO cambiar (es número)
+        if debug:
+            print(f"         → Sin contexto claro, mantener como número")
+        return False
+    
+    def _analyze_thin_character(self, char, index, char_list, char_images, 
+                                confidence, is_uppercase_mode, debug):
+        """
+        Analiza UN carácter delgado que podría ser 'I' o 'i'
+        
+        Regla simple:
+        1. Si aspect ratio < 0.35 → es 'I' o 'i' (depende del modo)
+        2. Si confianza < 50% Y está solo → probablemente sea 'I'/'i'
+        """
+        
+        # Análisis geométrico
         if char_images and index < len(char_images):
             img = char_images[index]
-            
-            # Calcular aspect ratio
             h, w = img.shape[:2] if len(img.shape) > 1 else (img.shape[0], 1)
             aspect_ratio = w / h if h > 0 else 0
             
-            # 'I' es muy delgada (aspect ratio < 0.4)
-            # 'P' tiene más ancho (aspect ratio > 0.4)
+            if debug:
+                print(f"      [{index}] '{char}' | AR: {aspect_ratio:.2f} | Conf: {confidence:.1%}")
+            
+            # 🔧 REGLA PRINCIPAL: Si es MUY delgado → es 'I' o 'i'
             if aspect_ratio < 0.35:
+                # Decidir entre 'I' o 'i' basándose en el MODO de la frase
+                result = 'I' if is_uppercase_mode else 'i'
+                
                 if debug:
-                    print(f"      [{index}] Aspect ratio {aspect_ratio:.2f} → muy delgada → 'I'")
-                return 'I' if char.isupper() else 'i'
+                    print(f"         → AR < 0.35, modo {('MAY' if is_uppercase_mode else 'min')} → '{result}'")
+                
+                return result
+            
+            # Si aspect ratio ambiguo (0.35-0.50) Y confianza baja
+            elif aspect_ratio < 0.50 and confidence < 0.50:
+                result = 'I' if is_uppercase_mode else 'i'
+                
+                if debug:
+                    print(f"         → AR ambiguo + baja conf → '{result}'")
+                
+                return result
         
-        return char
-    
-    def _analyze_thin_chars(self, char, index, char_list, char_images, debug):
-        """
-        Analiza caracteres delgados: 'l', '1', '|' vs 'I'/'i'
-        """
+        # Sin imagen o aspect ratio normal → analizar contexto local
         context = self._get_context(char_list, index)
         
-        # Si está rodeado de letras mayúsculas → 'I'
-        if context['prev'] and context['prev'].isupper() and context['next'] and context['next'].isupper():
+        # Si el carácter anterior/siguiente es mayúscula → probablemente 'I'
+        if context['prev'] and context['prev'].isupper():
             if debug:
-                print(f"      [{index}] '{char}' entre mayúsculas → 'I'")
+                print(f"         → Después de mayúscula → 'I'")
             return 'I'
         
-        # Si está rodeado de letras minúsculas → 'i'
-        if context['prev'] and context['prev'].islower() and context['next'] and context['next'].islower():
+        if context['next'] and context['next'].isupper():
             if debug:
-                print(f"      [{index}] '{char}' entre minúsculas → 'i'")
+                print(f"         → Antes de mayúscula → 'I'")
+            return 'I'
+        
+        # Si el carácter anterior/siguiente es minúscula → probablemente 'i'
+        if context['prev'] and context['prev'].islower():
+            if debug:
+                print(f"         → Después de minúscula → 'i'")
             return 'i'
         
-        # Al inicio de palabra → mayúscula
-        if context['position'] == 'start' or (context['prev'] and context['prev'] == ' '):
+        if context['next'] and context['next'].islower():
             if debug:
-                print(f"      [{index}] '{char}' al inicio → 'I'")
-            return 'I'
+                print(f"         → Antes de minúscula → 'i'")
+            return 'i'
         
-        return char
+        # Por defecto, usar el modo de la frase
+        return 'I' if is_uppercase_mode else 'i'
     
-    def _validate_i(self, char, index, char_list, char_images, debug):
+    def _validate_i_character(self, char, index, char_list, is_uppercase_mode, debug):
         """
-        Valida si un carácter clasificado como 'I'/'i' es correcto
+        Valida si 'I' o 'i' reconocida es correcta
         """
         context = self._get_context(char_list, index)
         
-        # Si 'I' está entre minúsculas, probablemente sea 'i'
+        # Si 'I' está entre minúsculas → cambiar a 'i'
         if char == 'I':
-            prev_is_lower = context['prev'] and context['prev'].islower()
-            next_is_lower = context['next'] and context['next'].islower()
-            
-            if prev_is_lower and next_is_lower:
+            if context['prev'] and context['prev'].islower() and context['next'] and context['next'].islower():
                 if debug:
                     print(f"      [{index}] 'I' entre minúsculas → 'i'")
                 return 'i'
         
-        # Si 'i' está entre mayúsculas, probablemente sea 'I'
+        # Si 'i' está entre mayúsculas → cambiar a 'I'
         elif char == 'i':
-            prev_is_upper = context['prev'] and context['prev'].isupper()
-            next_is_upper = context['next'] and context['next'].isupper()
-            
-            if prev_is_upper and next_is_upper:
+            if context['prev'] and context['prev'].isupper() and context['next'] and context['next'].isupper():
                 if debug:
                     print(f"      [{index}] 'i' entre mayúsculas → 'I'")
                 return 'I'
@@ -187,22 +245,23 @@ class OCRPostCorrector:
         """
         context = self._get_context(char_list, index)
         
-        # Si está rodeado de letras → probablemente sea 'O'/'o'
+        # Si está rodeado de letras → 'O'/'o'
         prev_is_alpha = context['prev'] and context['prev'].isalpha()
         next_is_alpha = context['next'] and context['next'].isalpha()
         
-        if prev_is_alpha and next_is_alpha:
+        if prev_is_alpha or next_is_alpha:
             if char == '0':
+                # Decidir entre 'O' o 'o' por el contexto
                 if context['prev'] and context['prev'].isupper():
                     if debug:
-                        print(f"      [{index}] '0' entre letras mayúsculas → 'O'")
+                        print(f"      [{index}] '0' entre letras MAY → 'O'")
                     return 'O'
                 else:
                     if debug:
-                        print(f"      [{index}] '0' entre letras minúsculas → 'o'")
+                        print(f"      [{index}] '0' entre letras min → 'o'")
                     return 'o'
         
-        # Si está rodeado de números → probablemente sea '0'
+        # Si está cerca de números → '0'
         prev_is_digit = context['prev'] and context['prev'].isdigit()
         next_is_digit = context['next'] and context['next'].isdigit()
         
@@ -215,7 +274,7 @@ class OCRPostCorrector:
         return char
     
     def _get_context(self, char_list, index):
-        """Obtiene el contexto de un carácter"""
+        """Obtiene contexto del carácter"""
         return {
             'prev': char_list[index-1] if index > 0 else None,
             'next': char_list[index+1] if index < len(char_list)-1 else None,
