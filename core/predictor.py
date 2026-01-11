@@ -16,7 +16,7 @@ from utils.dataset import LABEL_MAP, preprocess_char_unified
 from utils.post_correction import post_corrector
 
 try:
-    from utils.enhanced_preprocessing import intelligent_segmentation
+    from utils.enhanced_preprocessing import intelligent_segmentation, advanced_char_preprocessing
     USING_INTELLIGENT_SEG = True
 except ImportError:
     USING_INTELLIGENT_SEG = False
@@ -39,7 +39,7 @@ class UniversalPredictor:
         print("✅ Post-corrección geométrica activada")
         
         if USING_INTELLIGENT_SEG:
-            print("✅ Usando intelligent_segmentation")
+            print("✅ Usando intelligent_segmentation + advanced_char_preprocessing")
         else:
             print("⚠️  Usando segmentación básica")
     
@@ -128,7 +128,12 @@ class UniversalPredictor:
                 print(f"\n   [{i+1}] Región: ({x_start}, {y_start}) → ({x_end}, {y_end})")
                 print(f"       Tamaño: {char_img.shape}")
             
-            char_processed = preprocess_char_unified(char_img, debug=(debug and i < 3))
+            # 🆕 USAR PREPROCESAMIENTO MEJORADO
+            if USING_INTELLIGENT_SEG:
+                char_processed = advanced_char_preprocessing(char_img, debug=(debug and i < 3))
+            else:
+                char_processed = preprocess_char_unified(char_img, debug=(debug and i < 3))
+            
             char_input = char_processed.reshape(1, 32, 32, 1)
             
             prediction = self.model.predict(char_input, verbose=0)
@@ -140,8 +145,11 @@ class UniversalPredictor:
                 char_alt = cv2.resize(char_img, (32, 32))
                 if np.mean(char_alt) > 127:
                     char_alt = 255 - char_alt
+                
+                # 🆕 Binarización más agresiva
+                _, char_alt = cv2.threshold(char_alt, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
                 char_alt = (char_alt / 255.0).astype('float32')
-                char_alt = np.where(char_alt > 0.15, 1.0, 0.0)
+                char_alt = np.where(char_alt > 0.5, 1.0, 0.0)
                 
                 char_alt_input = char_alt.reshape(1, 32, 32, 1)
                 prediction_alt = self.model.predict(char_alt_input, verbose=0)

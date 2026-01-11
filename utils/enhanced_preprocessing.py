@@ -31,7 +31,9 @@ def smart_resize_for_ocr(image_path):
 
 
 def advanced_char_preprocessing(img_array, target_size=(32, 32), debug=False):
-    """Preprocesamiento EXTREMADAMENTE robusto para caracteres."""
+    """
+    🆕 MEJORADO: Preprocesamiento con mayor contraste y binarización agresiva.
+    """
     if len(img_array.shape) == 3:
         img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
     
@@ -41,23 +43,36 @@ def advanced_char_preprocessing(img_array, target_size=(32, 32), debug=False):
         print(f"    🔧 ADVANCED PREPROCESSING:")
         print(f"       Original: {original_shape}, rango: [{img_array.min()}, {img_array.max()}]")
     
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4, 4))
+    # 🔥 MEJORADO: CLAHE más agresivo
+    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(4, 4))
     img_enhanced = clahe.apply(img_array)
     
     if debug:
         print(f"       Post-CLAHE: rango [{img_enhanced.min()}, {img_enhanced.max()}]")
     
+    # Detectar si fondo es claro u oscuro
     mean_val = np.mean(img_enhanced)
     if mean_val > 127:
         img_enhanced = 255 - img_enhanced
         if debug:
             print(f"       🔄 INVERTIDO (mean: {mean_val:.1f})")
     
+    # 🆕 BINARIZACIÓN AGRESIVA CON OTSU
     _, binary = cv2.threshold(img_enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
+    # 🆕 Eliminar ruido pequeño (morfología)
     kernel_noise = np.ones((2, 2), np.uint8)
     binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_noise)
     
+    # 🆕 Reforzar trazos principales (dilate + erode)
+    kernel_thick = np.ones((2, 2), np.uint8)
+    binary = cv2.dilate(binary, kernel_thick, iterations=1)
+    binary = cv2.erode(binary, kernel_thick, iterations=1)
+    
+    if debug:
+        print(f"       Post-binario: blancos={np.sum(binary>0)}, negros={np.sum(binary==0)}")
+    
+    # Extraer bounding box del carácter
     coords = np.column_stack(np.where(binary > 0))
     if len(coords) == 0:
         result = np.zeros(target_size, dtype=np.float32)
@@ -73,6 +88,7 @@ def advanced_char_preprocessing(img_array, target_size=(32, 32), debug=False):
     if debug:
         print(f"       Tight BB: {char_tight.shape}")
     
+    # Padding proporcional (20% extra)
     h, w = char_tight.shape
     max_dim = max(h, w)
     padded_size = int(max_dim * 1.2)
@@ -86,15 +102,18 @@ def advanced_char_preprocessing(img_array, target_size=(32, 32), debug=False):
     if debug:
         print(f"       Padded: {padded.shape}")
     
+    # Redimensionar a 32x32
     resized = cv2.resize(padded, target_size, interpolation=cv2.INTER_AREA)
-    resized_normalized = resized / 255.0
-    resized_normalized = np.clip(resized_normalized * 1.2, 0, 1)
+    
+    # 🆕 NORMALIZACIÓN FUERTE: convertir a 0.0 o 1.0 (sin grises)
+    resized_normalized = (resized / 255.0).astype(np.float32)
+    resized_normalized = np.where(resized_normalized > 0.5, 1.0, 0.0)
     
     if debug:
         white_pct = (np.sum(resized_normalized > 0.5) / resized_normalized.size) * 100
         print(f"       Final: {resized_normalized.shape}, blancos: {white_pct:.1f}%")
     
-    return resized_normalized.astype(np.float32)
+    return resized_normalized
 
 
 def intelligent_segmentation(image_path, debug=False):
@@ -110,13 +129,30 @@ def intelligent_segmentation(image_path, debug=False):
     if debug:
         print(f"   Tipo: {'Manuscrita' if is_handwritten else 'Digital'} (var={variance:.0f})")
     
-    # Preprocesamiento adaptativo
+    # 🆕 MEJORADO: Preprocesamiento más agresivo
     if is_handwritten:
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        # CLAHE más fuerte
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(img)
-        _, binary = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        
+        # Binarización adaptativa
+        binary = cv2.adaptiveThreshold(
+            enhanced, 255, 
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, 
+            blockSize=15, 
+            C=8
+        )
+        
+        # Morfología para limpiar
+        kernel_clean = np.ones((2, 2), np.uint8)
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_clean)
+        
     else:
+        # Para texto digital: Otsu directo
         _, binary = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        
+        # Reforzar trazos
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 3))
         binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
     
@@ -154,7 +190,7 @@ def intelligent_segmentation(image_path, debug=False):
     if debug:
         print(f"   Segmentación inicial: {len(boxes)} caracteres")
     
-    # 🆕 MEJORADO: Fusionar puntos con 'i'/'j' usando posición X
+    # Fusionar puntos con 'i'/'j'
     boxes = merge_dots_with_stems_improved(boxes, h, w, debug=debug)
     
     if debug:
@@ -165,21 +201,7 @@ def intelligent_segmentation(image_path, debug=False):
 
 def merge_dots_with_stems_improved(boxes, image_height, image_width, debug=False):
     """
-    🔧 MEJORADO: Fusiona puntos de 'i'/'j' usando análisis espacial bidimensional.
-    
-    Estrategia:
-    1. Clasificar boxes en "puntos" y "líneas"
-    2. Para cada punto, buscar línea vertical DEBAJO en radio horizontal
-    3. Fusionar si están alineados
-    
-    Args:
-        boxes: Lista de (x, y, w, h)
-        image_height: Altura de la imagen
-        image_width: Ancho de la imagen
-        debug: Mostrar info
-    
-    Returns:
-        Lista de boxes fusionados
+    Fusiona puntos de 'i'/'j' usando análisis espacial bidimensional.
     """
     if len(boxes) <= 1:
         return boxes
@@ -193,18 +215,18 @@ def merge_dots_with_stems_improved(boxes, image_height, image_width, debug=False
         area = w * h
         aspect = w / h if h > 0 else 0
         
-        # ¿Es un punto pequeño? (área < 200, casi cuadrado, en parte superior)
+        # ¿Es un punto pequeño?
         is_dot = (
             area < 200 and 
             0.4 < aspect < 2.5 and 
-            h < image_height * 0.2  # Muy pequeño verticalmente
+            h < image_height * 0.2
         )
         
-        # ¿Es una línea vertical? (delgada, alta)
+        # ¿Es una línea vertical?
         is_stem = (
             aspect < 0.6 and 
             h > w * 1.5 and
-            h > image_height * 0.3  # Tiene altura significativa
+            h > image_height * 0.3
         )
         
         if is_dot:
@@ -228,7 +250,6 @@ def merge_dots_with_stems_improved(boxes, image_height, image_width, debug=False
         best_stem = None
         best_distance = float('inf')
         
-        # Buscar la línea más cercana DEBAJO del punto
         for stem_idx, stem_x, stem_y, stem_w, stem_h in stems:
             if stem_idx in merged_indices:
                 continue
@@ -236,37 +257,28 @@ def merge_dots_with_stems_improved(boxes, image_height, image_width, debug=False
             stem_center_x = stem_x + stem_w / 2
             stem_top = stem_y
             
-            # Verificar que la línea esté DEBAJO del punto
             vertical_gap = stem_top - dot_bottom
-            if vertical_gap < -10:  # Línea está ARRIBA del punto (no válido)
+            if vertical_gap < -10:
                 continue
             
-            # Distancia horizontal entre centros
             horizontal_distance = abs(dot_center_x - stem_center_x)
-            
-            # Umbral: máximo 50% del ancho de la línea
             max_horizontal_offset = max(dot_w, stem_w) * 0.6
-            
-            # Gap vertical máximo: 40% de la altura de la imagen
             max_vertical_gap = image_height * 0.4
             
             if (horizontal_distance < max_horizontal_offset and 
                 0 <= vertical_gap < max_vertical_gap):
                 
-                # Calcular distancia total (pitagórica)
                 total_distance = np.sqrt(horizontal_distance**2 + vertical_gap**2)
                 
                 if total_distance < best_distance:
                     best_distance = total_distance
                     best_stem = (stem_idx, stem_x, stem_y, stem_w, stem_h)
         
-        # Si encontró pareja, fusionar
         if best_stem:
             stem_idx, stem_x, stem_y, stem_w, stem_h = best_stem
             
-            # Crear bounding box fusionado
             new_x = min(dot_x, stem_x)
-            new_y = dot_y  # Desde el punto
+            new_y = dot_y
             new_right = max(dot_x + dot_w, stem_x + stem_w)
             new_bottom = max(dot_y + dot_h, stem_y + stem_h)
             new_w = new_right - new_x
@@ -278,11 +290,6 @@ def merge_dots_with_stems_improved(boxes, image_height, image_width, debug=False
             
             if debug:
                 print(f"      🔗 Fusionado: punto({dot_x},{dot_y},{dot_w},{dot_h}) + línea({stem_x},{stem_y},{stem_w},{stem_h})")
-                print(f"         → ({new_x},{new_y},{new_w},{new_h})")
-        else:
-            # Punto sin pareja (raro, pero mantener por si acaso)
-            if debug:
-                print(f"      ⚠️ Punto huérfano: ({dot_x},{dot_y},{dot_w},{dot_h})")
     
     # Agregar boxes no fusionados
     all_boxes_indexed = dots + stems + others
@@ -290,7 +297,7 @@ def merge_dots_with_stems_improved(boxes, image_height, image_width, debug=False
         if idx not in merged_indices:
             merged_boxes.append((x, y, w, h))
     
-    # Ordenar por posición X (izquierda a derecha)
+    # Ordenar por posición X
     merged_boxes = sorted(merged_boxes, key=lambda b: b[0])
     
     if debug:
