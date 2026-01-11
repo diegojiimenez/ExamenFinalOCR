@@ -1,5 +1,5 @@
 """
-Preprocesamiento avanzado del proyecto original
+Preprocesamiento avanzado con FUSIÓN de puntos para 'i'/'j'
 """
 
 import cv2
@@ -8,24 +8,18 @@ from scipy import ndimage
 
 
 def smart_resize_for_ocr(image_path):
-    """
-    Redimensiona automáticamente para tamaño óptimo de OCR.
-    COPIADO del proyecto original.
-    """
+    """Redimensiona automáticamente para tamaño óptimo de OCR."""
     img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     h, w = img.shape
     
     print(f"📐 Imagen original: {w}x{h}")
     
-    # Si es muy pequeña, aumentar
     if w < 200:
         target_width = 300
         scale = target_width / w
         new_h = int(h * scale)
         img = cv2.resize(img, (target_width, new_h), interpolation=cv2.INTER_CUBIC)
         print(f"   ↑ Aumentada a: {img.shape[1]}x{img.shape[0]}")
-    
-    # Si es muy grande, reducir
     elif w > 800:
         target_width = 600
         scale = target_width / w
@@ -37,10 +31,7 @@ def smart_resize_for_ocr(image_path):
 
 
 def advanced_char_preprocessing(img_array, target_size=(32, 32), debug=False):
-    """
-    Preprocesamiento EXTREMADAMENTE robusto para caracteres.
-    """
-    # ... (mantener código actual)
+    """Preprocesamiento EXTREMADAMENTE robusto para caracteres."""
     if len(img_array.shape) == 3:
         img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
     
@@ -108,9 +99,8 @@ def advanced_char_preprocessing(img_array, target_size=(32, 32), debug=False):
 
 def intelligent_segmentation(image_path, debug=False):
     """
-    Segmentación mejorada COPIADA del proyecto original.
+    Segmentación mejorada con FUSIÓN de puntos para 'i'/'j'.
     """
-    # 🔧 IMPORTANTE: Redimensionar primero
     img = smart_resize_for_ocr(image_path)
     h, w = img.shape
     
@@ -120,36 +110,190 @@ def intelligent_segmentation(image_path, debug=False):
     if debug:
         print(f"   Tipo: {'Manuscrita' if is_handwritten else 'Digital'} (var={variance:.0f})")
     
+    # Preprocesamiento adaptativo
     if is_handwritten:
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(img)
         _, binary = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     else:
         _, binary = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 3))
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
     
+    # Encontrar contornos
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
+    # Filtrar contornos
     boxes = []
     for contour in contours:
         x, y, cw, ch = cv2.boundingRect(contour)
         area = cw * ch
+        aspect_ratio = cw / ch if ch > 0 else 0
         
         if is_handwritten:
             min_area = 20
             min_dimension = 5
             max_width = w * 0.5
             max_height = h * 0.9
+            min_aspect = 0.05
+            max_aspect = 6.0
         else:
-            min_area = 50
+            min_area = 30
             min_dimension = 8
             max_width = w * 0.3
             max_height = h * 0.8
+            min_aspect = 0.08
+            max_aspect = 4.0
         
-        if (area >= min_area and cw >= min_dimension and ch >= min_dimension and
-            cw <= max_width and ch <= max_height):
+        if (area >= min_area and 
+            cw >= min_dimension and ch >= min_dimension and
+            cw <= max_width and ch <= max_height and
+            min_aspect <= aspect_ratio <= max_aspect):
             boxes.append((x, y, cw, ch))
     
     if debug:
-        print(f"   Segmentación: {len(boxes)} caracteres")
+        print(f"   Segmentación inicial: {len(boxes)} caracteres")
+    
+    # 🆕 MEJORADO: Fusionar puntos con 'i'/'j' usando posición X
+    boxes = merge_dots_with_stems_improved(boxes, h, w, debug=debug)
+    
+    if debug:
+        print(f"   Segmentación final: {len(boxes)} caracteres")
     
     return boxes, img
+
+
+def merge_dots_with_stems_improved(boxes, image_height, image_width, debug=False):
+    """
+    🔧 MEJORADO: Fusiona puntos de 'i'/'j' usando análisis espacial bidimensional.
+    
+    Estrategia:
+    1. Clasificar boxes en "puntos" y "líneas"
+    2. Para cada punto, buscar línea vertical DEBAJO en radio horizontal
+    3. Fusionar si están alineados
+    
+    Args:
+        boxes: Lista de (x, y, w, h)
+        image_height: Altura de la imagen
+        image_width: Ancho de la imagen
+        debug: Mostrar info
+    
+    Returns:
+        Lista de boxes fusionados
+    """
+    if len(boxes) <= 1:
+        return boxes
+    
+    # Clasificar boxes
+    dots = []
+    stems = []
+    others = []
+    
+    for i, (x, y, w, h) in enumerate(boxes):
+        area = w * h
+        aspect = w / h if h > 0 else 0
+        
+        # ¿Es un punto pequeño? (área < 200, casi cuadrado, en parte superior)
+        is_dot = (
+            area < 200 and 
+            0.4 < aspect < 2.5 and 
+            h < image_height * 0.2  # Muy pequeño verticalmente
+        )
+        
+        # ¿Es una línea vertical? (delgada, alta)
+        is_stem = (
+            aspect < 0.6 and 
+            h > w * 1.5 and
+            h > image_height * 0.3  # Tiene altura significativa
+        )
+        
+        if is_dot:
+            dots.append((i, x, y, w, h))
+        elif is_stem:
+            stems.append((i, x, y, w, h))
+        else:
+            others.append((i, x, y, w, h))
+    
+    if debug:
+        print(f"      Clasificación: {len(dots)} puntos, {len(stems)} líneas, {len(others)} otros")
+    
+    # Fusionar puntos con líneas
+    merged_indices = set()
+    merged_boxes = []
+    
+    for dot_idx, dot_x, dot_y, dot_w, dot_h in dots:
+        dot_center_x = dot_x + dot_w / 2
+        dot_bottom = dot_y + dot_h
+        
+        best_stem = None
+        best_distance = float('inf')
+        
+        # Buscar la línea más cercana DEBAJO del punto
+        for stem_idx, stem_x, stem_y, stem_w, stem_h in stems:
+            if stem_idx in merged_indices:
+                continue
+            
+            stem_center_x = stem_x + stem_w / 2
+            stem_top = stem_y
+            
+            # Verificar que la línea esté DEBAJO del punto
+            vertical_gap = stem_top - dot_bottom
+            if vertical_gap < -10:  # Línea está ARRIBA del punto (no válido)
+                continue
+            
+            # Distancia horizontal entre centros
+            horizontal_distance = abs(dot_center_x - stem_center_x)
+            
+            # Umbral: máximo 50% del ancho de la línea
+            max_horizontal_offset = max(dot_w, stem_w) * 0.6
+            
+            # Gap vertical máximo: 40% de la altura de la imagen
+            max_vertical_gap = image_height * 0.4
+            
+            if (horizontal_distance < max_horizontal_offset and 
+                0 <= vertical_gap < max_vertical_gap):
+                
+                # Calcular distancia total (pitagórica)
+                total_distance = np.sqrt(horizontal_distance**2 + vertical_gap**2)
+                
+                if total_distance < best_distance:
+                    best_distance = total_distance
+                    best_stem = (stem_idx, stem_x, stem_y, stem_w, stem_h)
+        
+        # Si encontró pareja, fusionar
+        if best_stem:
+            stem_idx, stem_x, stem_y, stem_w, stem_h = best_stem
+            
+            # Crear bounding box fusionado
+            new_x = min(dot_x, stem_x)
+            new_y = dot_y  # Desde el punto
+            new_right = max(dot_x + dot_w, stem_x + stem_w)
+            new_bottom = max(dot_y + dot_h, stem_y + stem_h)
+            new_w = new_right - new_x
+            new_h = new_bottom - new_y
+            
+            merged_boxes.append((new_x, new_y, new_w, new_h))
+            merged_indices.add(dot_idx)
+            merged_indices.add(stem_idx)
+            
+            if debug:
+                print(f"      🔗 Fusionado: punto({dot_x},{dot_y},{dot_w},{dot_h}) + línea({stem_x},{stem_y},{stem_w},{stem_h})")
+                print(f"         → ({new_x},{new_y},{new_w},{new_h})")
+        else:
+            # Punto sin pareja (raro, pero mantener por si acaso)
+            if debug:
+                print(f"      ⚠️ Punto huérfano: ({dot_x},{dot_y},{dot_w},{dot_h})")
+    
+    # Agregar boxes no fusionados
+    all_boxes_indexed = dots + stems + others
+    for idx, x, y, w, h in all_boxes_indexed:
+        if idx not in merged_indices:
+            merged_boxes.append((x, y, w, h))
+    
+    # Ordenar por posición X (izquierda a derecha)
+    merged_boxes = sorted(merged_boxes, key=lambda b: b[0])
+    
+    if debug:
+        print(f"      Resultado: {len(merged_boxes)} boxes ({len(merged_indices)} fusionados)")
+    
+    return merged_boxes

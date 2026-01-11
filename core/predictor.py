@@ -69,8 +69,29 @@ class UniversalPredictor:
         num_chars = len(char_boxes)
         print(f"🔍 Caracteres detectados: {num_chars}")
         
+        # 🆕 FIX: Manejar imagen vacía
         if not char_boxes:
-            return "", {'text': '', 'type': 'VACÍO', 'num_chars': 0}
+            empty_info = {
+                'text': '',
+                'text_original': '',
+                'type': 'VACÍO',
+                'num_chars': 0,
+                'boxes': [],
+                'confidences': [],
+                'recognized_chars': [],
+                'corrected_chars': [],
+                'char_images': []
+            }
+            
+            print("⚠️  No se detectaron caracteres en la imagen")
+            print('='*70)
+            
+            # Si se pidió visualización, crear figura vacía
+            if visualize:
+                fig = self._create_empty_visualization(original)
+                return "", empty_info, fig
+            
+            return "", empty_info
         
         # Tipo de contenido
         if num_chars == 1:
@@ -91,7 +112,7 @@ class UniversalPredictor:
         
         recognized_chars = []
         confidences = []
-        char_images = []  # 🆕 Guardar imágenes para post-corrección
+        char_images = []
         
         for i, (x, y, cw, ch) in enumerate(char_boxes):
             margin = max(2, min(cw, ch) // 8)
@@ -101,7 +122,7 @@ class UniversalPredictor:
             x_end = min(w, x + cw + margin)
             
             char_img = original[y_start:y_end, x_start:x_end]
-            char_images.append(char_img)  # 🆕 Guardar imagen
+            char_images.append(char_img)
             
             if debug and i < 3:
                 print(f"\n   [{i+1}] Región: ({x_start}, {y_start}) → ({x_end}, {y_end})")
@@ -149,12 +170,12 @@ class UniversalPredictor:
         print("-" * 70)
         print(f"📝 PREDICCIÓN ORIGINAL: '{phrase_original}'")
         
-        # 🆕 POST-CORRECCIÓN GEOMÉTRICA (con imágenes)
+        # POST-CORRECCIÓN
         phrase_corrected = post_corrector.correct_text(
             phrase_original, 
             recognized_chars, 
             confidences,
-            char_images=char_images,  # 🆕 Pasar imágenes
+            char_images=char_images,
             debug=debug
         )
         
@@ -163,6 +184,10 @@ class UniversalPredictor:
         
         print('='*70)
         
+        corrected_chars = list(phrase_corrected.replace(" ", ""))
+        if len(corrected_chars) < len(recognized_chars):
+            corrected_chars = list(phrase_corrected)
+        
         info = {
             'text': phrase_corrected,
             'text_original': phrase_original,
@@ -170,17 +195,77 @@ class UniversalPredictor:
             'num_chars': num_chars,
             'boxes': char_boxes,
             'confidences': confidences,
-            'recognized_chars': recognized_chars
+            'recognized_chars': recognized_chars,
+            'corrected_chars': corrected_chars,
+            'char_images': char_images
         }
         
         if visualize:
             fig = self._create_modern_visualization(
-                original, char_boxes, recognized_chars,
-                confidences, phrase_corrected, content_type
+                original, char_boxes, corrected_chars,
+                confidences, phrase_corrected, content_type,
+                recognized_chars
             )
             return phrase_corrected, info, fig
         
         return phrase_corrected, info
+    
+    def _create_empty_visualization(self, image):
+        """
+        🆕 Visualización para imagen sin caracteres detectados
+        """
+        if len(image.shape) == 2:
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        else:
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        fig = plt.figure(figsize=(12, 8), facecolor='#1e1e1e')
+        ax = plt.subplot(111, facecolor='#2d2d30')
+        
+        ax.imshow(image_rgb, cmap='gray')
+        
+        # Mensaje de advertencia
+        h, w = image.shape[:2]
+        ax.text(
+            w/2, h/2,
+            "⚠️ NO SE DETECTARON CARACTERES\n\n"
+            "Posibles causas:\n"
+            "• Imagen demasiado pequeña o borrosa\n"
+            "• Contraste insuficiente\n"
+            "• Caracteres muy delgados o separados\n\n"
+            "Intenta con una imagen de mejor calidad",
+            fontsize=14,
+            color='#ff6b35',
+            ha='center',
+            va='center',
+            bbox=dict(
+                boxstyle='round,pad=1.5',
+                facecolor='#1e1e1e',
+                edgecolor='#ff6b35',
+                linewidth=3,
+                alpha=0.9
+            ),
+            zorder=100
+        )
+        
+        ax.set_title(
+            "📋 RECONOCIMIENTO OCR | Tipo: VACÍO\nTexto: (sin caracteres)",
+            fontsize=18,
+            fontweight='bold',
+            color='#ff6b35',
+            pad=20,
+            bbox=dict(
+                boxstyle='round,pad=1',
+                facecolor='#1e1e1e',
+                edgecolor='#ff6b35',
+                linewidth=3
+            )
+        )
+        
+        ax.axis('off')
+        plt.tight_layout()
+        
+        return fig
     
     def _basic_segmentation(self, original, debug):
         """Segmentación básica (fallback)"""
@@ -298,8 +383,8 @@ class UniversalPredictor:
         
         return ' '.join(phrase.split())
     
-    def _create_modern_visualization(self, image, boxes, chars, confs, text, content_type):
-        """Visualización moderna"""
+    def _create_modern_visualization(self, image, boxes, chars, confs, text, content_type, original_chars=None):
+        """Visualización moderna con comparación original vs corregido"""
         if len(image.shape) == 2:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
         else:
@@ -337,7 +422,11 @@ class UniversalPredictor:
             )
             ax.add_patch(fancy_box)
             
-            label_text = f"#{i+1}\n'{char}'\n{conf:.0%}"
+            # 🆕 Mostrar corrección si hay diferencia
+            if original_chars and i < len(original_chars) and original_chars[i] != char:
+                label_text = f"#{i+1}\n'{char}' ← '{original_chars[i]}'\n{conf:.0%}"
+            else:
+                label_text = f"#{i+1}\n'{char}'\n{conf:.0%}"
             
             ax.text(
                 x + w/2, y - 15,
@@ -357,8 +446,7 @@ class UniversalPredictor:
                 zorder=100
             )
         
-        emojis = {"LETRA": "🔤", "PALABRA": "📝", "FRASE": "📄"}
-        title = f"{emojis[content_type]} RECONOCIMIENTO OCR | Tipo: {content_type}\nTexto: {text}"
+        title = f"📋 RECONOCIMIENTO OCR | Tipo: {content_type}\nTexto: {text}"
         
         ax.set_title(
             title,
@@ -380,7 +468,7 @@ class UniversalPredictor:
         return fig
     
     def show_visualization(self, image_path):
-        """Muestra visualización"""
+        """Visualización simplificada"""
         text, info, fig = self.predict(image_path, debug=True, visualize=True)
         plt.show()
         return text, info
