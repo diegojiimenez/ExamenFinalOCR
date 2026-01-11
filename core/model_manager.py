@@ -11,7 +11,7 @@ class ModelManager:
     Maneja la carga y verificación del modelo
     """
     
-    def __init__(self, model_path="models/trained_model.h5"):  # 🔄 CAMBIADO
+    def __init__(self, model_path="models/trained_model.h5"): 
         self.model_path = model_path
         self.model = None
     
