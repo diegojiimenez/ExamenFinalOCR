@@ -1,5 +1,5 @@
 """
-Funciones de dataset - MAPEO EXACTO del proyecto original
+Funciones de dataset - MAPEO 
 """
 
 import cv2
@@ -17,7 +17,7 @@ except ImportError:
 
 
 # ============================================================================
-# LABEL_MAP EXACTO DEL PROYECTO ORIGINAL
+# LABEL_MAP EXACTO 
 # ============================================================================
 LABEL_MAP = {
     # Números 0-9 (labels 0-9)
@@ -83,7 +83,7 @@ def validate_label(char):
 
 def print_label_map():
     print("\n" + "="*60)
-    print("📋 LABEL_MAP (62 clases) - PROYECTO ORIGINAL")
+    print("📋 LABEL_MAP (62 clases)")
     print("="*60)
     print("\n🔢 NÚMEROS (0-9):")
     print("   " + " ".join([LABEL_MAP[i] for i in range(10)]))
